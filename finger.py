@@ -1,0 +1,233 @@
+import serial
+import time
+import random
+
+mmHg2PSI=0.0193368
+PSI2mmHg=1.0/mmHg2PSI
+
+class Pressure:
+    def __init__(self):
+        self.ser = serial.Serial('COM14', timeout=0.1) # open serial port
+        print(self.ser.name)             # check which port was really used
+        self.lastpressure=14.0
+        self.lowp=-1
+        self.highp=-1
+        self.atmosphere=14.0
+        self.meansteps=-1
+
+    def reset_sensor(self):
+        self.ser.write(b'0')
+        time.sleep(0.1)
+        
+
+    def read_pressure(self):
+        self.ser.write(b'R')
+        s=self.ser.readline()
+        #print(s)
+        s=s[:-2]
+        try:
+            pressure=int(s)*0.001
+        except:
+            pressure=self.lastpressure
+        self.lastpressure=pressure
+        #pressure=random.random()
+        #time.sleep(0.025)
+        return pressure
+
+    def calibrate_curve(self, low, high, inc):
+        s=[]
+        p=[]
+        mmHg=[]
+        pos=low
+        pos=pos-inc
+        self.home(pos)
+        print(pos)
+        while(pos<=high):
+            time.sleep(0.01)
+            
+            p0=self.inc(inc)
+            print("Pressure @ %d steps = %f PSI, %f mmHg" % (pos, p0, self.psi2mmHg(p0)))
+            p.append(p0)
+            mmHg.append(self.psi2mmHg(p0))
+            pos=pos+inc
+            s.append(pos)
+            #print(pos)
+        return (s, p, mmHg)
+    
+    def calibrate(self, l, h): # calibrate between l and h steps
+        self.ser.write(b'C');
+        s=("G%5d\n" % l).encode()
+        self.ser.write(s);
+        s=("G%5d\n" % h).encode()
+        self.ser.write(s);
+        self.lowp=self.readint()*0.001
+        self.highp=self.readint()*0.001
+        self.stepsl=self.readint()
+        self.stepsh=self.readint()
+        print("Pressure range = [%f - %f] PSI, [%f -%f] mmHg, %d-%d steps" % (self.lowp, self.highp, self.psi2mmHg(self.lowp), self.psi2mmHg(self.highp), self.stepsl, self.stepsh))
+        slope=(self.psi2mmHg(self.highp)-self.psi2mmHg(self.lowp))/(self.stepsh-self.stepsl)
+        print("slope= %f" % slope)
+        return [ self.lowp, self.highp, self.stepsl, self.stepsh ]
+
+    def home(self, n): # go to home + N steps
+        self.ser.write(b'H');
+        s=("G%5d\n" % n).encode()
+        self.ser.write(s);
+        p=self.readint()*0.001
+        print("Pressure @ %d steps = %f PSI, %f mmHg" % (n, p, self.psi2mmHg(p)))
+        return p
+
+    def inc(self, n): # go to current + N steps
+        self.ser.write(b'I');
+        s=("G%5d\n" % n).encode()
+        self.ser.write(s);
+        #s=self.ser.readline()
+        #print(":",s,":")
+        #p=int(s)*0.001
+
+        
+        p=self.readint()*0.001
+     
+        return p
+
+    def start_reading(self):
+        self.ser.write(b'R')
+        self.reads=[]
+
+    def stop_reading(self):
+        self.ser.write(b'S')
+        
+
+    def quick_read(self):
+        self.ser.write(b'r')
+        s=self.ser.readline()
+        p=int(s)*0.001
+        mmHg=self.psi2mmHg(p)
+        return (p, mmHg)
+        
+
+    def get_pressures(self):
+        p=[]
+        for s in self.reads:
+            p0=s*0.001
+            p.append(p0)
+        return p
+
+    def psi2mmHg(self, psi):
+        return (psi-self.atmosphere)/mmHg2PSI
+
+    def mmHg2psi(self, mmHg):
+        return mmHg*mmHg2PSI+self.atmosphere;
+
+    def get_mmHgs(self):
+        p=[]
+        for s in self.reads:
+            p0=int(s)*0.001
+            p.append(self.psi2mmHg(p0))
+        return p
+    
+    def one_read(self):
+        r=self.readint()
+        self.reads.append(r)
+        return r
+
+    def readline(self):
+        s=self.ser.readline()
+        return s
+
+    def readint(self):
+        s=b""
+        while(len(s)==0):
+            s=self.readline()
+            #print(s,len(s))
+        s=s[:-2]
+        return int(s)
+
+    def try_read_pressure(self):
+        #self.ser.write(b'R')
+        s=self.ser.readline()
+        print(s)
+        s=s[:-2]
+        try:
+            pressure=int(s)*0.001
+        except:
+            print("bad reading!")
+            pressure=self.lastpressure
+        self.lastpressure=pressure
+        return pressure
+
+    def dump(self):
+        s=self.ser.readline()
+        print(s)
+
+    def write_waveform(self, w):
+        s=b'W'
+        #print(s)
+        r=self.ser.write(s)
+        print(r)
+        for w0 in w:
+            #print(w0)
+            s=("D%5d\n" % w0).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+            #s=b'D'
+            #print(s)
+            r=self.ser.write(s)
+            #print(r)
+        s=b'E'
+        self.ser.write(s)
+
+    def read_waveform(self):
+        r=self.ser.write(b'Q')
+        #print(r)
+        wf=[]
+        while(1):
+            s=""
+            while(len(s)==0):
+                s=self.ser.readline()
+                #print(s)
+            s=s[:-2]
+            x=int(s)
+            #print(x)
+            if(x<0):
+                break
+            wf.append(x)
+        return wf
+            
+    def play_waveform(self, n, hsteps, home): # n loops, starting at hsteps, home to go to once done
+        s=("G%5d\n" % n).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        self.ser.write(s)
+        s=("G%5d\n" % hsteps).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        self.ser.write(s)
+        s=("G%5d\n" % home).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        self.ser.write(s)
+        s=""
+        while(len(s)==0):
+            s=self.ser.readline()
+        self.meansteps=int(s)
+        print(s, self.meansteps)
+
+    def set_params(self, mean, scale, stop):
+        self.ser.write(b'P');
+        s=("G%5d\n" % mean).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        self.ser.write(s)
+        s=("G%5d\n" % scale).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        self.ser.write(s)
+        s=("G%5d\n" % stop).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        self.ser.write(s)
+        #s=self.ser.readline()
+        #print("S=", s)
+        
+        
+
+    def read_limits(self):
+        self.ser.write(b'L')
+        s=self.ser.readline()
+        print(s)
+
+
+#p=Pressure()
+#before=time.time()
+#for i in range(500):
+#    pressure=p.read_pressure()
+    #print(pressure)
+#after=time.time()
+#print('elapsed %d, rate %d/s' % ((after-before), (500.0/(after-before))))

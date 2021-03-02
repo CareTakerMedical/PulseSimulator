@@ -5,6 +5,8 @@ import random
 mmHg2PSI=0.0193368
 PSI2mmHg=1.0/mmHg2PSI
 
+sensor_version='A' # A is 0-25psi, B is 0-300 mmHg, C is 0-25 psi
+
 class Pressure:
     def __init__(self):
         self.ser = serial.Serial('COM14', timeout=0.1) # open serial port
@@ -14,6 +16,10 @@ class Pressure:
         self.highp=-1
         self.atmosphere=14.0
         self.meansteps=-1
+        if(sensor_version=='B'):
+            self.pressure_multiplier=0.01 # output is 0-30000 for 0-300 mmHg range.
+        else:
+            self.pressure_multiplier=0.001 # output is 0-25000 for 0-25 PSI range.
 
     def reset_sensor(self):
         self.ser.write(b'0')
@@ -26,7 +32,7 @@ class Pressure:
         #print(s)
         s=s[:-2]
         try:
-            pressure=int(s)*0.001
+            pressure=int(s)*self.pressure_multiplier
         except:
             pressure=self.lastpressure
         self.lastpressure=pressure
@@ -34,7 +40,16 @@ class Pressure:
         #time.sleep(0.025)
         return pressure
 
+
+    # 'Quick' calibrate curve
     def calibrate_curve(self, low, high, inc):
+        return self.do_calibrate_curve(low, high, inc, 0.01)
+
+    # 'Slow' calibrate curve with time delay 'pause'
+    def slow_calibrate_curve(self, low, high, inc, pause):
+        return self.do_calibrate_curve(low, high, inc, pause)
+
+    def do_calibrate_curve(self, low, high, inc, pause):
         s=[]
         p=[]
         mmHg=[]
@@ -43,8 +58,7 @@ class Pressure:
         self.home(pos)
         print(pos)
         while(pos<=high):
-            time.sleep(0.01)
-            
+            time.sleep(pause)
             p0=self.inc(inc)
             print("Pressure @ %d steps = %f PSI, %f mmHg" % (pos, p0, self.psi2mmHg(p0)))
             p.append(p0)
@@ -60,8 +74,8 @@ class Pressure:
         self.ser.write(s);
         s=("G%5d\n" % h).encode()
         self.ser.write(s);
-        self.lowp=self.readint()*0.001
-        self.highp=self.readint()*0.001
+        self.lowp=self.readint()*self.pressure_multiplier
+        self.highp=self.readint()*self.pressure_multiplier
         self.stepsl=self.readint()
         self.stepsh=self.readint()
         print("Pressure range = [%f - %f] PSI, [%f -%f] mmHg, %d-%d steps" % (self.lowp, self.highp, self.psi2mmHg(self.lowp), self.psi2mmHg(self.highp), self.stepsl, self.stepsh))
@@ -73,7 +87,7 @@ class Pressure:
         self.ser.write(b'H');
         s=("G%5d\n" % n).encode()
         self.ser.write(s);
-        p=self.readint()*0.001
+        p=self.readint()*self.pressure_multiplier
         print("Pressure @ %d steps = %f PSI, %f mmHg" % (n, p, self.psi2mmHg(p)))
         return p
 
@@ -81,13 +95,7 @@ class Pressure:
         self.ser.write(b'I');
         s=("G%5d\n" % n).encode()
         self.ser.write(s);
-        #s=self.ser.readline()
-        #print(":",s,":")
-        #p=int(s)*0.001
-
-        
-        p=self.readint()*0.001
-     
+        p=self.readint()*self.pressure_multiplier
         return p
 
     def start_reading(self):
@@ -101,7 +109,7 @@ class Pressure:
     def quick_read(self):
         self.ser.write(b'r')
         s=self.ser.readline()
-        p=int(s)*0.001
+        p=int(s)*self.pressure_multiplier
         mmHg=self.psi2mmHg(p)
         return (p, mmHg)
         
@@ -109,7 +117,7 @@ class Pressure:
     def get_pressures(self):
         p=[]
         for s in self.reads:
-            p0=s*0.001
+            p0=s*self.pressure_multiplier
             p.append(p0)
         return p
 
@@ -122,7 +130,7 @@ class Pressure:
     def get_mmHgs(self):
         p=[]
         for s in self.reads:
-            p0=int(s)*0.001
+            p0=int(s)*self.pressure_multiplier
             p.append(self.psi2mmHg(p0))
         return p
     
@@ -149,7 +157,7 @@ class Pressure:
         print(s)
         s=s[:-2]
         try:
-            pressure=int(s)*0.001
+            pressure=int(s)*self.pressure_multiplier
         except:
             print("bad reading!")
             pressure=self.lastpressure

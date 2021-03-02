@@ -184,6 +184,31 @@ int read_acceleration(client interface i2c_master_if i2c, int reg) {
 #define PRESSURE_I2C_ADDR   0x18
 //#define USE_EOC
 
+#define VERSION_A	// 10% to 90% range
+//#define VERSION_B	// 2.5% to 2.25% range
+//#define VERSION_C	// 20% to 80% range
+
+#ifdef VERSION_A
+unsigned int low_range=0x19999A; // 10% of 1<<24
+unsigned int mult=5;		 // multiplier is 5/4, as 80% of range used, and Python expects 0-(1<<23) to span 0-25 psi
+unsigned int div=4;              // divider
+unsigned int pressure_range=25000; // output in mPSI
+#endif
+
+#ifdef VERSION_B
+unsigned int low_range=0x66666;  // 2.5% of 1<<24
+unsigned int mult=5;		 // multiplier is 5/1, as 20% of range used, and Python expects 0-(1<<23) to span 0-25 psi
+unsigned int div=1;              // divider
+unsigned int pressure_range=30000; // output in 10x milli-mmHg 
+#endif
+
+#ifdef VERSION_C
+unsigned int low_range=0x333333; // 20% of 1<<24
+unsigned int mult=5;		 // multiplier is 5/3, as 60% of range used, and Python expects 0-(1<<23) to span 0-25 psi
+unsigned int div=3;              // divider
+unsigned int pressure_range=25000; // output in mPSI 
+#endif
+
 {unsigned char, int} read_pressure(client interface i2c_master_if i2c) {
     i2c_regop_res_t result;
     int pressure = 0;
@@ -204,7 +229,7 @@ int read_acceleration(client interface i2c_master_if i2c, int reg) {
         return {0xff, n};
     }
 
-#ifdef USE_EOC
+#ifdef USE_EOC // use end of conversion flag ?
     while(1){
         p_eoc :> x;
         if(x){
@@ -227,8 +252,8 @@ int read_acceleration(client interface i2c_master_if i2c, int reg) {
     }
 
     pressure=(data[1]<<16)+(data[2]<<8)+data[3];
-    pressure=pressure-0x19999A; // how much above 10% ?
-    pressure=pressure*5/4; // 80% of the full 24-bit range is used, so scale up to full 24-bit
+    pressure=pressure-low_range; // how much above the lowest value
+    pressure=pressure*mult/div;  // compensate for fractional usage of full 24-bit range
     status=data[0];
     return {status, pressure};
 }
@@ -647,7 +672,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                                     }
                                     lowsteps0=steps; // actual steps
                                     { status, pressure} =read_pressure(i2c);
-                                    pressure=((pressure>>8)*25000)>>16;
+                                    pressure=((pressure>>8)*pressure_range)>>16;
                                     c_pressure <: pressure;
                                     r=0;
                                     while(1){
@@ -663,7 +688,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                                     }
                                     highsteps0=steps; // actual steps
                                     { status, pressure} =read_pressure(i2c);
-                                    pressure=((pressure>>8)*25000)>>16;
+                                    pressure=((pressure>>8)*pressure_range)>>16;
                                     c_pressure <: pressure;
                                     c_pressure <: lowsteps0;
                                     c_pressure <: highsteps0;
@@ -695,7 +720,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                                                     if(status&0x25){
                                                         pressure=-status;
                                                     }else{
-                                                        pressure=((pressure>>8)*25000)>>16;
+                                                        pressure=((pressure>>8)*pressure_range)>>16;
                                                     }
                                                 }
                                                 c_pressure <: pressure;
@@ -722,7 +747,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                                                          }
                                                      }
                                                      { status, pressure} =read_pressure(i2c);
-                                                     pressure=((pressure>>8)*25000)>>16;
+                                                     pressure=((pressure>>8)*pressure_range)>>16;
                                                      c_pressure <: pressure;
                                                 }else{
                                                     if(x==9){ // incremental move
@@ -748,7 +773,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                                                              if(status&0x25){
                                                                  pressure=-status;
                                                              }else{
-                                                                 pressure=((pressure>>8)*25000)>>16;
+                                                                 pressure=((pressure>>8)*pressure_range)>>16;
                                                              }
                                                          }
                                                          c_pressure <: pressure;
@@ -781,7 +806,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                 if(status==0xff){
                     pressure=-1;
                 }else{
-                    pressure=((pressure>>8)*25000)>>16;
+                    pressure=((pressure>>8)*pressure_range)>>16;
                 }
                 c_pressure <: pressure;
 

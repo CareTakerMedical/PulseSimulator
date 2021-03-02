@@ -167,7 +167,7 @@ mid_ki=0.1;
 RNG=7500;
 MID=mean
 stop=0
-while(i<N):
+while(i<N): # up until N, keep appending to the list
     s=pressure.one_read()
     i=i+1
     now=time.time()
@@ -184,15 +184,15 @@ while(i<N):
         ax.legend((line1,line2,line3), ('BP', 'MAX:%3.1f' % m1, 'MIN:%3.1f' % m0),loc='lower center')
         fig.canvas.draw()    
 
-while(1):
+while(1): # Now we have N, retire the last one and then append
     s=pressure.one_read()
     i=i+1
     now=time.time()
-    t=t.append(now-before)
-    t=t[1:]
+    t=t[1:] # lose the oldest time
+    t.append(now-before)
     p1=pressure.psi2mmHg(int(s)*0.001)
+    p=p[1:] # lose th oldest pressure       
     p.append(p1)
-    p=p[1:]        
     if((i%10)==0):
         line1.set_data(T0, p)
         data=np.array(p)
@@ -201,7 +201,7 @@ while(1):
         line2.set_data([0, 10.0], [m1, m1])
         line3.set_data([0, 10.0], [m0, m0])
         ax.legend((line1,line2,line3), ('BP', 'MAX:%3.1f' % m1, 'MIN:%3.1f' % m0),loc='lower center')
-        if((i%N)==0): # feedback every few seconds
+        if(False and ((i%N)==0)): # feedback every few seconds, disabled for now
             mid=(m0+m1)*0.5
             span=(m1-m0)
             miderror=mid-bpmean
@@ -217,10 +217,10 @@ while(1):
         if(keyboard.is_pressed(' ') and (stop==0)):
             print("Keyboard break")
             stop=1
-        if(p1<40.0):
+        if(p1<30.0):
             break
         
-for i in range(100):
+for i in range(100): # drain any old readings
         s=pressure.one_read()
 pressure.stop_reading()
 

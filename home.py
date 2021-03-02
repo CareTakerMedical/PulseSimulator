@@ -12,5 +12,5 @@ i=0
 before=time.time()
 threshold=before+10.0
 t=[]
-pressure.home(100)
+pressure.home(50)
 

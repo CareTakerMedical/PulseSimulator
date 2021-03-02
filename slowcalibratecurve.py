@@ -11,7 +11,7 @@ i=0
 
 before=time.time()
 threshold=before+10.0
-(s,p,mmHg)=pressure.slow_calibrate_curve(50, 1800, 50, 2.0)
+(s,p,mmHg)=pressure.slow_calibrate_curve(50, 1450, 100, 8.0)
 
 fig, ax=plt.subplots(2,1)
 anim1=ax[0].plot(s,p)

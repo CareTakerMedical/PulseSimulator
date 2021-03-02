@@ -13,8 +13,8 @@ import keyboard
 play=True
 psi=False
 
-systolic=120.0
-diastolic=80.0
+systolic=140.0
+diastolic=90.0
 bprange=systolic-diastolic
 bpmean=(systolic+diastolic)*0.5
 
@@ -24,8 +24,8 @@ home=100 # so that this is 14psi, and 3000 can be a bit higher.
 plt.ion()
 
 pressure=Pressure()
-lsteps=300
-hsteps=2000
+lsteps=50
+hsteps=1500
 (steps0,psi0,mmHg0)=pressure.calibrate_curve(lsteps, hsteps, 25)
 steps=np.array(steps0)
 psis=np.array(psi0)
@@ -89,7 +89,7 @@ while(i <(len(v0))):
     x=v0[i]
     s=round(np.interp(x, mmHgs, steps))
     #print(s)
-    i=i+10
+    i=i+25
     ts.append(t)
     t=t+dt
     ys0.append(s)
@@ -194,8 +194,8 @@ while(1): # Now we have N, retire the last one and then append
     p=p[1:] # lose th oldest pressure       
     p.append(p1)
     if((i%10)==0):
-        line1.set_data(T0, p)
-        data=np.array(p)
+        line1.set_data(T0[0:N], p[0:N])
+        data=np.array(p[0:N])
         m0=np.amin(data)
         m1=np.amax(data)
         line2.set_data([0, 10.0], [m1, m1])
@@ -213,6 +213,7 @@ while(1): # Now we have N, retire the last one and then append
             RNG=RNG*(1.0-span_kp*spanerror-span_ki*sei)
             print("SPAN:", span, bprange, RNG)
             pressure.set_params(MID, RNG, stop)
+        fig.canvas.draw()
          
         if(keyboard.is_pressed(' ') and (stop==0)):
             print("Keyboard break")

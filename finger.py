@@ -11,10 +11,10 @@ class Pressure:
     def __init__(self):
         self.ser = serial.Serial('COM14', timeout=0.1) # open serial port
         print(self.ser.name)             # check which port was really used
-        self.lastpressure=14.0
+        self.lastpressure=14.52
         self.lowp=-1
         self.highp=-1
-        self.atmosphere=14.0
+        self.atmosphere=14.52
         self.meansteps=-1
         if(sensor_version=='B'):
             self.pressure_multiplier=0.01 # output is 0-30000 for 0-300 mmHg range.
@@ -54,7 +54,6 @@ class Pressure:
         p=[]
         mmHg=[]
         pos=low
-        pos=pos-inc
         self.home(pos)
         print(pos)
         while(pos<=high):

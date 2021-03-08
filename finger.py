@@ -58,8 +58,9 @@ class Pressure:
         self.home(pos)
         print(pos)
         while(pos<=high):
-            time.sleep(pause)
-            p0=self.inc(inc)
+            self.inc(inc)
+            time.sleep(pause) # pause now, before reading pressure
+            (p0,mm)=self.quick_read()
             print("Pressure @ %d steps = %f mmHg" % (pos, p0, self.psi2mmHg(p0)))
             p.append(p0)
             mmHg.append(self.psi2mmHg(p0))

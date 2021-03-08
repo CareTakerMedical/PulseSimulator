@@ -184,29 +184,29 @@ int read_acceleration(client interface i2c_master_if i2c, int reg) {
 #define PRESSURE_I2C_ADDR   0x18
 //#define USE_EOC
 
-#define VERSION_A	// 10% to 90% range
-//#define VERSION_B	// 2.5% to 2.25% range
+//#define VERSION_A	// 10% to 90% range
+#define VERSION_B	// 2.5% to 2.25% range
 //#define VERSION_C	// 20% to 80% range
 
 #ifdef VERSION_A
 unsigned int low_range=0x19999A; // 10% of 1<<24
 unsigned int mult=5;		 // multiplier is 5/4, as 80% of range used, and Python expects 0-(1<<23) to span 0-25 psi
 unsigned int div=4;              // divider
-unsigned int pressure_range=25000; // output in mPSI
+int pressure_range=25000; // output in mPSI
 #endif
 
 #ifdef VERSION_B
 unsigned int low_range=0x66666;  // 2.5% of 1<<24
 unsigned int mult=5;		 // multiplier is 5/1, as 20% of range used, and Python expects 0-(1<<23) to span 0-25 psi
 unsigned int div=1;              // divider
-unsigned int pressure_range=30000; // output in 10x milli-mmHg 
+int pressure_range=5801; // output in mPSI
 #endif
 
 #ifdef VERSION_C
 unsigned int low_range=0x333333; // 20% of 1<<24
 unsigned int mult=5;		 // multiplier is 5/3, as 60% of range used, and Python expects 0-(1<<23) to span 0-25 psi
 unsigned int div=3;              // divider
-unsigned int pressure_range=25000; // output in mPSI 
+int pressure_range=25000; // output in mPSI
 #endif
 
 {unsigned char, int} read_pressure(client interface i2c_master_if i2c) {

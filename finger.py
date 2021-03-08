@@ -2,24 +2,25 @@ import serial
 import time
 import random
 
-mmHg2PSI=0.0193368
-PSI2mmHg=1.0/mmHg2PSI
 
-sensor_version='A' # A is 0-25psi, B is 0-300 mmHg, C is 0-25 psi
 
 class Pressure:
     def __init__(self):
-        self.ser = serial.Serial('COM14', timeout=0.1) # open serial port
+        self.sensor_version='B' # A is 0-25psi, B is 0-300 mmHg, C is 0-25 psi
+        self.ser = serial.Serial('COM3', timeout=0.1) # open serial port
         print(self.ser.name)             # check which port was really used
         self.lastpressure=14.52
         self.lowp=-1
         self.highp=-1
-        self.atmosphere=14.52
         self.meansteps=-1
-        if(sensor_version=='B'):
-            self.pressure_multiplier=0.01 # output is 0-30000 for 0-300 mmHg range.
+        if(self.sensor_version=='B'):
+            self.atmosphere=0.0
         else:
-            self.pressure_multiplier=0.001 # output is 0-25000 for 0-25 PSI range.
+            self.atmosphere=14.52
+
+        self.pressure_multiplier=0.001 # output is in mPSI.
+        self.mmHg2PSI=0.0193368
+        self.PSI2mmHg=1.0/self.mmHg2PSI
 
     def reset_sensor(self):
         self.ser.write(b'0')
@@ -59,7 +60,7 @@ class Pressure:
         while(pos<=high):
             time.sleep(pause)
             p0=self.inc(inc)
-            print("Pressure @ %d steps = %f PSI, %f mmHg" % (pos, p0, self.psi2mmHg(p0)))
+            print("Pressure @ %d steps = %f mmHg" % (pos, p0, self.psi2mmHg(p0)))
             p.append(p0)
             mmHg.append(self.psi2mmHg(p0))
             pos=pos+inc
@@ -108,6 +109,7 @@ class Pressure:
     def quick_read(self):
         self.ser.write(b'r')
         s=self.ser.readline()
+        print("S", s)
         p=int(s)*self.pressure_multiplier
         mmHg=self.psi2mmHg(p)
         return (p, mmHg)
@@ -121,10 +123,10 @@ class Pressure:
         return p
 
     def psi2mmHg(self, psi):
-        return (psi-self.atmosphere)/mmHg2PSI
+        return (psi-self.atmosphere)/self.mmHg2PSI
 
     def mmHg2psi(self, mmHg):
-        return mmHg*mmHg2PSI+self.atmosphere;
+        return mmHg*self.mmHg2PSI+self.atmosphere;
 
     def get_mmHgs(self):
         p=[]

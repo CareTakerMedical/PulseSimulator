@@ -218,6 +218,7 @@ while(1): # Now we have N, retire the last one and then append
         if(keyboard.is_pressed(' ') and (stop==0)):
             print("Keyboard break")
             stop=1
+            pressure.set_params(MID, RNG, stop)
         if(p1<30.0):
             break
         

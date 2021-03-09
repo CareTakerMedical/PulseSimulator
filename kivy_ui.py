@@ -135,17 +135,32 @@ class UIApp(App):
         HB.add_widget(self.exit_button)
         
         superBox.add_widget(HB)
+        #self.graph = Graph(xlabel='X', ylabel='Y', x_ticks_minor=5,
+         #     x_ticks_major=25, y_ticks_major=50,
+         #     y_grid_label=True, x_grid_label=True, padding=5,
+         #     x_grid=True, y_grid=True, xmin=-0, xmax=500, ymin=0, ymax=200)
+        #self.plot = MeshLinePlot(color=[1, 1, 1, 1])
+        #self.plot.points = [(x, 50+50*math.sin(x / 10.)) for x in range(0, 501)]
+        #self.graph.add_plot(self.plot)
+        self.default_graph_waveform()
+        superBox.add_widget(self.graph)
+        #print(self.plot.points)
+        return superBox
+
+    def default_graph_waveform(self):
         self.graph = Graph(xlabel='X', ylabel='Y', x_ticks_minor=5,
               x_ticks_major=25, y_ticks_major=50,
               y_grid_label=True, x_grid_label=True, padding=5,
-              x_grid=True, y_grid=True, xmin=-0, xmax=500, ymin=0, ymax=200)
+              x_grid=True, y_grid=True, xmin=-0, xmax=500, ymin=0, ymax=240)
         self.plot = MeshLinePlot(color=[1, 1, 1, 1])
-        self.plot.points = [(x, 50+50*math.sin(x / 10.)) for x in range(0, 501)]
+        self.plot.points = [(x, 5) for x in range(0, 501)]
         self.graph.add_plot(self.plot)
-        superBox.add_widget(self.graph)
-        print(self.plot.points)
-        return superBox
-
+        
+    def reset_graph_waveform(self):
+        self.graph.xmin=0
+        self.graph.xmax=500
+        self.graph.x_ticks_major=25
+        self.plot.points = [(x, 5) for x in range(0, 501)]
 
     def read_pressure_callback(self, x):
         (p,mm)=self.pressure.quick_read()
@@ -164,17 +179,49 @@ class UIApp(App):
         self.home_button.background_color=[0.7, 0.7, 0.7, 1];
         return False
 
-    def calibrate_callback(self,x):
+    def calibrate_inc_callback(self,x):
+        p=self.pressure.one_calibrate(self.calib_inc, self.calib_delay)
+        if(p>=self.calib_max):
+            self.pressure.end_calibrate()
+            self.state=None
+            self.calib_button.text="Calibrate"
+            self.calib_button.background_color=[0.7, 0.7, 0.7, 1];
+        else:
+            self.home_event = Clock.schedule_once(self.calibrate_inc_callback, 0.0)
+        print(self.calib_index, self.pressure.calib_mmHg, len(self.plot.points))
+        self.plot.points[self.calib_index]=(self.pressure.calib_s[self.calib_index], self.pressure.calib_mmHg[self.calib_index])
+        print(self.plot.points)
+        self.calib_index=self.calib_index+1
+        return False
+
+    def calibrate_start_callback(self,x):
         h=int(self.textinputHomePos.text)
         cm=int(self.textinputCalibMax.text)
         ci=int(self.textinputCalibInc.text)
         
         cd=float(self.textinputCalibDelay.text)
         print("calibrate %d,%d, %d, %f" % (h,cm,ci,cd))
-        self.pressure.slow_calibrate_curve(h, cm, ci, cd)
-        self.state=None
-        self.calib_button.text="Calibrate"
-        self.calib_button.background_color=[0.7, 0.7, 0.7, 1];
+        h0=h;
+        x=[h];
+        while(h0<=cm):
+            h0=h0+ci
+            x.append(h0)
+        print(x)
+        self.graph.xmin=h
+        self.graph.xmax=cm
+        self.graph.x_ticks_major=100
+        self.plot.points = []
+        for x0 in x:
+            self.plot.points.append((x0, 0))
+        #self.graph.add_plot(self.plot)
+        
+        
+        self.pressure.start_calibrate_curve(h, ci)
+        self.calib_inc=ci
+        self.calib_max=cm
+        self.calib_delay=cd
+        self.calib_index=0
+        self.home_event = Clock.schedule_once(self.calibrate_inc_callback, 0.01)
         return False
 
     def play_calibrate_callback(self,x):
@@ -251,6 +298,7 @@ class UIApp(App):
             self.state='PRESSURE'
             button.text="Stop Reading\nPressure"
             button.background_color=[1, 0.5, 0.5, 1];
+            self.reset_graph_waveform()
             self.pressure_event = Clock.schedule_interval(self.read_pressure_callback, 0.25)
         elif(self.state=='PRESSURE'):
             self.state=None
@@ -276,7 +324,7 @@ class UIApp(App):
             self.state='CALIBRATE'
             button.text="Calibrating..."
             button.background_color=[1, 0.5, 0.5, 1];
-            self.home_event = Clock.schedule_once(self.calibrate_callback, 0.25)
+            self.home_event = Clock.schedule_once(self.calibrate_start_callback, 0.25)
             
         
     def play_waveform(self, button):

@@ -68,6 +68,28 @@ class Pressure:
             s.append(pos)
             #print(pos)
         return (s, p, mmHg)
+
+    def start_calibrate_curve(self, low, inc):
+        self.calib_s=[]
+        self.calib_p=[]
+        self.calib_mmHg=[]
+        self.calib_pos=low-inc
+        self.home(self.calib_pos) 
+
+    def one_calibrate(self, inc, pause):
+        self.inc(inc)
+        time.sleep(pause)
+        (p0,mm)=self.quick_read()
+        print("Pressure @ %d steps = %f PSI, %f mmHg" % (self.calib_pos, p0, self.psi2mmHg(p0)))
+        self.calib_p.append(p0)
+        self.calib_mmHg.append(self.psi2mmHg(p0))
+        self.calib_pos=self.calib_pos+inc
+        self.calib_s.append(self.calib_pos)
+        return self.calib_pos
+
+    def end_calibrate(self):
+        return (self.calib_s, self.calib_p, self.calib_mmHg)
+        
     
     def calibrate(self, l, h): # calibrate between l and h steps
         self.ser.write(b'C');

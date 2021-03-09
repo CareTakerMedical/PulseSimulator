@@ -237,7 +237,6 @@ class UIApp(App):
         self.steps=np.array(steps0)
         self.psis=np.array(psi0)
         self.mmHgs=np.array(mmHg0)
-
         f=open('TestPulses.dat', 'rb')
         a=f.readlines()
         f.close()
@@ -287,6 +286,9 @@ class UIApp(App):
         self.pressure.write_waveform(ys)
         self.pressure.play_waveform(-1, cm, h)
         self.pressure.start_reading()
+        self.play_button.background_color=[0.7, 0.7, 0.7, 1];
+        self.play_button.text="Stop Playing..."
+        self.state="PLAY2"
         return False
 
 
@@ -315,8 +317,7 @@ class UIApp(App):
             button.text="Going Home"
             button.background_color=[1, 0.5, 0.5, 1];
             self.home_event = Clock.schedule_once(self.home_callback, 0.1)
-        
-                   
+                 
 
     def calibrate(self, button):
         print("CALIBRATE")
@@ -325,17 +326,30 @@ class UIApp(App):
             button.text="Calibrating..."
             button.background_color=[1, 0.5, 0.5, 1];
             self.home_event = Clock.schedule_once(self.calibrate_start_callback, 0.25)
-            
+
+    def play_stop_callback(self, x):
+        for i in range(250): # drain any old readings
+            s=self.pressure.one_read()   
+        self.pressure.stop_reading()
+        self.play_button.text="Play Waveform"
+        self.play_button.background_color=[0.7, 0.7, 0.7, 1];
+        self.play_event.cancel()
         
     def play_waveform(self, button):
         print("PLAY WAVEFORM")
         if(self.state==None):
             self.state='PLAY'
-            button.text="Calibrating..."
-            button.background_color=[1, 0.5, 0.5, 1];
-            self.home_event = Clock.schedule_once(self.play_calibrate_callback, 0.25)
+            self.play_button.text="Calibrating..."
+            self.play_button.background_color=[1, 0.5, 0.5, 1];
+            self.play_event = Clock.schedule_once(self.play_calibrate_callback, 0.25)
+        elif(self.state=='PLAY2'):
+            self.pressure.set_params(self.pressure.meansteps, 7500, 1)
+            self.state=None
+            self.play_button.text="Stopping Waveform"
+            self.play_button.background_color=[0.5, 0.5, 1, 1];
+            self.play_event = Clock.schedule_once(self.play_stop_callback, 0.25)
             
-
+            
 
     def exit_app(self, button):
         print("EXIT")

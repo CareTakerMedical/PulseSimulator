@@ -227,7 +227,7 @@ class UIApp(App):
         mms=[]
         while(i <(len(v0))):
             x=v0[i]
-            s=round(np.interp(x, mmHgs, steps))
+            s=round(np.interp(x, self.mmHgs, self.steps))
             i=i+25
             ts.append(t)
             t=t+dt

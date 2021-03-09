@@ -61,7 +61,7 @@ class Pressure:
             self.inc(inc)
             time.sleep(pause) # pause now, before reading pressure
             (p0,mm)=self.quick_read()
-            print("Pressure @ %d steps = %f mmHg" % (pos, p0, self.psi2mmHg(p0)))
+            print("Pressure @ %d steps = %f PSI, %f mmHg" % (pos, p0, self.psi2mmHg(p0)))
             p.append(p0)
             mmHg.append(self.psi2mmHg(p0))
             pos=pos+inc

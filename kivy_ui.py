@@ -17,6 +17,9 @@ from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.clock import Clock
 
+# Note we need to pip install kivy, then pip install kivy_garden as below.
+#python -m pip install kivy_garden.graph --extra-index-url https://kivy-garden.github.io/simple/
+
 default_bgnd=[0.7,0.7,0.7,1]
 
 class FloatInput(TextInput):
@@ -34,6 +37,9 @@ class UIApp(App):
 
     def build(self):
         self.state=None
+        self.baselineHR=60.0 # baseline HR
+        self.Ts=1.0/50.0 # sampling period
+        self.modulation=0.1 # how much to modulate the pressure wave via RR
         self.pressure=Pressure()
         superBox = BoxLayout(orientation ='vertical') 
         HB = BoxLayout(orientation ='horizontal')
@@ -147,6 +153,19 @@ class UIApp(App):
         #print(self.plot.points)
         return superBox
 
+    def resample_HR(self, values, heartrate):
+        out=[]
+        ratio=heartrate/self.baselineHR
+        index=range(len(values))
+        index0=[]
+        x=0
+        while(x<(len(values)-1)):
+            index0.append(x)
+            v=np.interp(x, index, values)
+            out.append(v)
+            x=x+ratio # advance more slowly in time
+        return out
+
     def default_graph_waveform(self):
         self.graph = Graph(xlabel='X', ylabel='Y', x_ticks_minor=5,
               x_ticks_major=25, y_ticks_major=50,
@@ -163,12 +182,12 @@ class UIApp(App):
         self.plot.points = [(x, 5) for x in range(0, 501)]
 
     def read_pressure_callback(self, x):
-        (p,mm)=self.pressure.quick_read()
+        (p,mm,t)=self.pressure.quick_read()
         swp=self.plot.points[self.index]
         copy=(self.index, mm)
         self.plot.points[self.index]=copy
         self.index=(self.index+1)%500
-        self.pressure_label.text="%3.1f mmHg" % mm
+        self.pressure_label.text="%3.1f mmHg / %2.1f C" % (mm, t)
         
     def home_callback(self,x):
         h=int(self.textinputHomePos.text)
@@ -224,12 +243,27 @@ class UIApp(App):
         self.home_event = Clock.schedule_once(self.calibrate_inc_callback, 0.01)
         return False
 
+    def play_more_callback(self,x):
+        for a in range(10):
+            s, t=self.pressure.one_read()
+            p1=self.pressure.psi2mmHg(int(s)*self.pressure.pressure_multiplier)
+            t1=float(t)*self.pressure.temp_multiplier
+            self.plot.points[self.play_i]=(self.plot.points[self.play_i][0], p1)
+            self.play_i=(self.play_i+1)%500
+            self.pressure_label.text="%3.1f mmHg / %2.1f C" % (p1, t1)
+        self.play_more_event = Clock.schedule_once(self.play_more_callback, 0)   
+            
+        
+
     def play_calibrate_callback(self,x):
         h=int(self.textinputHomePos.text)
         cm=int(self.textinputCalibMax.text)
         ci=int(self.textinputCalibInc.text)
         systolic=float(self.textinputSystolic.text)
         diastolic=float(self.textinputDiastolic.text)
+        heartrate=float(self.textInputHR.text)
+        resprate=float(self.textInputRR.text)
+         
         cd=float(self.textinputCalibDelay.text)
         print("play calibrate %d,%d, %d" % (h,cm,ci))
         print("Sys %f Dia %f" % (systolic, diastolic))
@@ -244,8 +278,11 @@ class UIApp(App):
         for l in a:
             x=float(l)
             values.append(x)
-
+       
         v=values[:-20]
+        if(not (self.baselineHR==heartrate)):
+            print("RESAMPLING @ %f from %f" % (heartrate, self.baselineHR))
+            values=self.resample_HR(values, heartrate)
         minb=50000
         maxb=-50000
         for b in v:
@@ -286,9 +323,11 @@ class UIApp(App):
         self.pressure.write_waveform(ys)
         self.pressure.play_waveform(-1, cm, h)
         self.pressure.start_reading()
+        self.play_i=0
         self.play_button.background_color=[0.7, 0.7, 0.7, 1];
         self.play_button.text="Stop Playing..."
         self.state="PLAY2"
+        self.play_more_event = Clock.schedule_once(self.play_more_callback, 0)
         return False
 
 
@@ -298,13 +337,13 @@ class UIApp(App):
         if(self.state==None):
             self.index=0
             self.state='PRESSURE'
-            button.text="Stop Reading\nPressure"
+            button.text="Stop Reading\nPressure & Temp"
             button.background_color=[1, 0.5, 0.5, 1];
             self.reset_graph_waveform()
             self.pressure_event = Clock.schedule_interval(self.read_pressure_callback, 0.25)
         elif(self.state=='PRESSURE'):
             self.state=None
-            button.text="Read\nPressure"
+            button.text="Read\nPressure & Temp"
             button.background_color=[0.7, 0.7, 0.7, 1];
             self.pressure_event.cancel()
 
@@ -328,11 +367,13 @@ class UIApp(App):
             self.home_event = Clock.schedule_once(self.calibrate_start_callback, 0.25)
 
     def play_stop_callback(self, x):
+        self.play_more_event.cancel()
         for i in range(250): # drain any old readings
             s=self.pressure.one_read()   
         self.pressure.stop_reading()
         self.play_button.text="Play Waveform"
         self.play_button.background_color=[0.7, 0.7, 0.7, 1];
+        
         self.play_event.cancel()
         
     def play_waveform(self, button):
@@ -343,6 +384,7 @@ class UIApp(App):
             self.play_button.background_color=[1, 0.5, 0.5, 1];
             self.play_event = Clock.schedule_once(self.play_calibrate_callback, 0.25)
         elif(self.state=='PLAY2'):
+            print("STOPPING")
             self.pressure.set_params(self.pressure.meansteps, 7500, 1)
             self.state=None
             self.play_button.text="Stopping Waveform"

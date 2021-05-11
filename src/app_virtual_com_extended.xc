@@ -43,8 +43,10 @@ on tile[0]: in port p_flimit = XS1_PORT_1N; // near limit switch
 on tile[0]: in port p_nlimit = XS1_PORT_1M; // far limit switch
 
 #define WAVE_LEN    4096
+#define PULSE_LEN   256
 extern int waveform[WAVE_LEN];
 extern int waveform2[WAVE_LEN]; // waveform table is aliased so two threads can use it.
+extern signed short pulse_table[PULSE_LEN];
 
 int adjust_mean;
 int adjust_scale;
@@ -182,7 +184,11 @@ int read_acceleration(client interface i2c_master_if i2c, int reg) {
 }
 
 #define PRESSURE_I2C_ADDR   0x18
-//#define USE_EOC
+
+// Note - default address of MCP9808 is 0x18 but we short A0 to VDD to get 0x19
+#define TEMP_I2C_ADDR       0x19
+#define TEMP_REG            0x05  // ambient temp register
+
 
 //#define VERSION_A	// 10% to 90% range
 #define VERSION_B	// 2.5% to 2.25% range
@@ -271,6 +277,30 @@ void reset_sensor(void)
 
 }
 
+
+//inline uint16_t read_reg16_addr8(client interface i2c_master_if i,
+//                                   uint8_t device_addr, uint8_t reg,
+//                                   i2c_regop_res_t &result)
+//  {
+int read_temperature(client interface i2c_master_if i2c) {
+    i2c_regop_res_t result;
+    int t;
+
+    t=i2c.read_reg16_addr8(TEMP_I2C_ADDR, TEMP_REG, result);
+    if(result!=I2C_REGOP_SUCCESS){
+       t=-100000;
+    }else{
+        t=t&0xFFF; // 12 bits
+    }
+    return t;
+}
+
+void init_temperature_sensor(client interface i2c_master_if i2c)
+{
+
+
+}
+
 /* Initializes the Application */
 void app_init(client interface i2c_master_if i2c)
 {
@@ -280,6 +310,7 @@ void app_init(client interface i2c_master_if i2c)
     /* Set all LEDs to OFF (Active low)*/
     p_led <: 0x0F;
     reset_sensor();
+    init_temperature_sensor(i2c);
 
 
 }
@@ -611,6 +642,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
     int rt_reading;
     unsigned char status;
     int pressure;
+    int temp;
     int x;
     int r;
     int i;
@@ -723,7 +755,9 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                                                         pressure=((pressure>>8)*pressure_range)>>16;
                                                     }
                                                 }
+                                                temp = read_temperature(i2c);
                                                 c_pressure <: pressure;
+                                                c_pressure <: temp;
                                                 //c_pressure <: 15000;
                                             }else{
                                                 if(x==8){ // home
@@ -808,7 +842,9 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                 }else{
                     pressure=((pressure>>8)*pressure_range)>>16;
                 }
+                temp=read_temperature(i2c);
                 c_pressure <: pressure;
+                c_pressure <: temp;
 
                 break;
             }
@@ -854,6 +890,7 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
     unsigned int length, led_id;
 
     int x = 0;
+    int t=0;
 
     char value, tmp_string[50];
     unsigned int button_1_valid, button_2_valid;
@@ -868,7 +905,8 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
     while(1){
         select{
             case c_pressure :> x : {
-                length = sprintf(tmp_string, "%d\r\n", x);
+                c_pressure :> t;
+                length = sprintf(tmp_string, "%d,%d\r\n", x, t);
                 cdc.write(tmp_string, length);
                 break;
             }
@@ -891,7 +929,8 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
                     if(value=='r'){ // read once
                         c_pressure <: 7;
                         c_pressure :> x;
-                        length = sprintf(tmp_string, "%d\r\n", x);
+                        c_pressure :> t;
+                        length = sprintf(tmp_string, "%d,%d\r\n", x, t);
                         cdc.write(tmp_string, length);
                     }
 

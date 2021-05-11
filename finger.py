@@ -21,6 +21,7 @@ class Pressure:
         self.pressure_multiplier=0.001 # output is in mPSI.
         self.mmHg2PSI=0.0193368
         self.PSI2mmHg=1.0/self.mmHg2PSI
+        self.temp_multiplier=0.0625 # output steps, degrees C
 
     def reset_sensor(self):
         self.ser.write(b'0')
@@ -133,9 +134,12 @@ class Pressure:
         self.ser.write(b'r')
         s=self.ser.readline()
         print("S", s)
-        p=int(s)*self.pressure_multiplier
+        w=s.split(b",")
+        
+        p=int(w[0])*self.pressure_multiplier
         mmHg=self.psi2mmHg(p)
-        return (p, mmHg)
+        t=float(w[1])*self.temp_multiplier
+        return (p, mmHg, t)
         
 
     def get_pressures(self):
@@ -159,9 +163,9 @@ class Pressure:
         return p
     
     def one_read(self):
-        r=self.readint()
-        self.reads.append(r)
-        return r
+        r,s=self.read2ints()
+        #self.reads.append(r)
+        return r,s
 
     def readline(self):
         s=self.ser.readline()
@@ -174,6 +178,17 @@ class Pressure:
             #print(s,len(s))
         s=s[:-2]
         return int(s)
+
+    def read2ints(self):
+        s=b""
+        while(len(s)==0):
+            s=self.readline()
+            #print(s,len(s))
+        s=s[:-2]
+        w=s.split(",")
+        
+        return int(w[0]), int(w[1])
+
 
     def try_read_pressure(self):
         #self.ser.write(b'R')

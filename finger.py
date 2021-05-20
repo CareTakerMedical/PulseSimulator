@@ -61,7 +61,7 @@ class Pressure:
         while(pos<=high):
             self.inc(inc)
             time.sleep(pause) # pause now, before reading pressure
-            (p0,mm)=self.quick_read()
+            (p0,mm, t)=self.quick_read()
             print("Pressure @ %d steps = %f PSI, %f mmHg" % (pos, p0, self.psi2mmHg(p0)))
             p.append(p0)
             mmHg.append(self.psi2mmHg(p0))
@@ -80,7 +80,7 @@ class Pressure:
     def one_calibrate(self, inc, pause):
         self.inc(inc)
         time.sleep(pause)
-        (p0,mm)=self.quick_read()
+        (p0,mm,t)=self.quick_read()
         print("Pressure @ %d steps = %f PSI, %f mmHg" % (self.calib_pos, p0, self.psi2mmHg(p0)))
         self.calib_p.append(p0)
         self.calib_mmHg.append(self.psi2mmHg(p0))
@@ -185,7 +185,7 @@ class Pressure:
             s=self.readline()
             #print(s,len(s))
         s=s[:-2]
-        w=s.split(",")
+        w=s.split(b",")
         
         return int(w[0]), int(w[1])
 

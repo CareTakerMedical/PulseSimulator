@@ -6,7 +6,6 @@ import math
 import sys
 import struct
 import pickle
-import keyboard
 import re
 
 from kivy.app import App
@@ -113,16 +112,16 @@ class UIApp(App):
         
         cell3c=BoxLayout(orientation='horizontal')
         label=Label(text='HR')
-        textinputHR=FloatInput(text='75.0')
+        self.textinputHR=FloatInput(text='75.0')
         cell3c.add_widget(label)
-        cell3c.add_widget(textinputHR)
+        cell3c.add_widget(self.textinputHR)
         cell3.add_widget(cell3c)
         
         cell3d=BoxLayout(orientation='horizontal')
         label=Label(text='RR')
-        textinputRR=FloatInput(text='10.0')
+        self.textinputRR=FloatInput(text='10.0')
         cell3d.add_widget(label)
-        cell3d.add_widget(textinputRR)
+        cell3d.add_widget(self.textinputRR)
         cell3.add_widget(cell3d)
         
         HB.add_widget(cell3)
@@ -261,8 +260,8 @@ class UIApp(App):
         ci=int(self.textinputCalibInc.text)
         systolic=float(self.textinputSystolic.text)
         diastolic=float(self.textinputDiastolic.text)
-        heartrate=float(self.textInputHR.text)
-        resprate=float(self.textInputRR.text)
+        heartrate=float(self.textinputHR.text)
+        resprate=float(self.textinputRR.text)
          
         cd=float(self.textinputCalibDelay.text)
         print("play calibrate %d,%d, %d" % (h,cm,ci))

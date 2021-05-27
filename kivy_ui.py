@@ -19,6 +19,8 @@ from kivy.clock import Clock
 # Note we need to pip install kivy, then pip install kivy_garden as below.
 #python -m pip install kivy_garden.graph --extra-index-url https://kivy-garden.github.io/simple/
 
+USE_PULSE_TABLE=False
+
 default_bgnd=[0.7,0.7,0.7,1]
 
 class FloatInput(TextInput):
@@ -33,6 +35,9 @@ class FloatInput(TextInput):
         return super(FloatInput, self).insert_text(s, from_undo=from_undo)
 
 class UIApp(App):
+
+    def init(self):
+        self.read_pulse_table()
 
     def build(self):
         self.state=None
@@ -152,6 +157,13 @@ class UIApp(App):
         #print(self.plot.points)
         return superBox
 
+    def read_pulse_table(self):
+        f=open('pulse256.dat', 'rb')
+        a=f.read()
+        f.close()
+        self.pulse256=struct.unpack("256h", a)
+        #print(self.pulse256)        
+
     def resample_HR(self, values, heartrate):
         out=[]
         ratio=heartrate/self.baselineHR
@@ -251,10 +263,9 @@ class UIApp(App):
             self.play_i=(self.play_i+1)%500
             self.pressure_label.text="%3.1f mmHg / %2.1f C" % (p1, t1)
         self.play_more_event = Clock.schedule_once(self.play_more_callback, 0)   
-            
-        
 
     def play_calibrate_callback(self,x):
+        # first get our waveform parameters
         h=int(self.textinputHomePos.text)
         cm=int(self.textinputCalibMax.text)
         ci=int(self.textinputCalibInc.text)
@@ -270,57 +281,86 @@ class UIApp(App):
         self.steps=np.array(steps0)
         self.psis=np.array(psi0)
         self.mmHgs=np.array(mmHg0)
-        f=open('TestPulses.dat', 'rb')
-        a=f.readlines()
-        f.close()
-        values=[]
-        for l in a:
-            x=float(l)
-            values.append(x)
-       
-        v=values[:-20]
-        if(not (self.baselineHR==heartrate)):
-            print("RESAMPLING @ %f from %f" % (heartrate, self.baselineHR))
-            values=self.resample_HR(values, heartrate)
-        minb=50000
-        maxb=-50000
-        for b in v:
-            if(b>maxb):
-                maxb=b
-        if(b<minb):
-            minb=b
-        print(minb, maxb)
-        span=maxb-minb
-
-        runs=1
-        v0=[]
-        for i in range(runs):
+        # Now branch on whether using pulse_table (single pulse with cyclic indexing),
+        # OR - whole waveform repeated. 
+        if(USE_PULSE_TABLE):
+            v=self.pulse256
+            minb=0.0
+            maxb=8192.0
+            print(minb, maxb)
+            span=maxb-minb
+            v0=[]
+            # now convert to float actual mmHg value cycle
             for b in v:
-                x=(b-minb)/span*(systolic-diastolic)+diastolic
+                x=(float(b)-minb)/span*(systolic-diastolic)+diastolic
                 v0.append(x)
+            # and now calibrate to the right number of steps
+            ys0=[]
+            i=0
+            while(i <(len(v0))):
+                x=v0[i]
+                s=round(np.interp(x, self.mmHgs, self.steps))
+                ys0.append(s)
+            ys0.append(ys0[0]) # append the first value at the end for wrap-around
+            self.pressure.write_table(ys)
+            hrindex=heartrate/60.0*256.0/50.0 # index value per 20ms interval
+            rrindex=resprate/60.0*256.0/50 # index value per 20ms interval
+           # now convert to X.8 format
+            self.play_table(round(hrindex*256.0), round(rrindex*256.0), cm, h) 
+ 
 
-        ys=[]
-        ys0=[]
-        i=0
-        t=0;
-        dt=20e-3
-        ts=[]
-        ps=[]
-        mms=[]
-        while(i <(len(v0))):
-            x=v0[i]
-            s=round(np.interp(x, self.mmHgs, self.steps))
-            i=i+25
-            ts.append(t)
-            t=t+dt
-            ys0.append(s)
+        else: # single recorded waveform sequence, possibly repeated
+            f=open('TestPulses.dat', 'rb')
+            a=f.readlines()
+            f.close()
+            values=[]
+            for l in a:
+                x=float(l)
+                values.append(x)
+       
+            v=values[:-20]
+            if(not (self.baselineHR==heartrate)):
+                print("RESAMPLING @ %f from %f" % (heartrate, self.baselineHR))
+                values=self.resample_HR(values, heartrate)
+            minb=50000
+            maxb=-50000
+            for b in v:
+                if(b>maxb):
+                    maxb=b
+            if(b<minb):
+                minb=b
+            print(minb, maxb)
+            span=maxb-minb
 
-        for i in range(runs):
-            for y in ys0:
-                ys.append(y)
-        print(len(ys))
-        self.pressure.write_waveform(ys)
-        self.pressure.play_waveform(-1, cm, h)
+            runs=1
+            v0=[]
+            for i in range(runs):
+                for b in v:
+                    x=(b-minb)/span*(systolic-diastolic)+diastolic
+                    v0.append(x)
+            ys=[]   
+            ys0=[]
+            i=0
+            t=0;
+            dt=20e-3
+            ts=[]
+            ps=[]
+            mms=[]
+            while(i <(len(v0))):
+                x=v0[i]
+                s=round(np.interp(x, self.mmHgs, self.steps))
+                i=i+25
+                ts.append(t)
+                t=t+dt
+                ys0.append(s)
+
+            for i in range(runs):
+                for y in ys0:
+                    ys.append(y)
+            print(len(ys))
+            self.pressure.write_waveform(ys)
+            self.pressure.play_waveform(-1, cm, h)
+            
         self.pressure.start_reading()
         self.play_i=0
         self.play_button.background_color=[0.7, 0.7, 0.7, 1];
@@ -401,6 +441,7 @@ class UIApp(App):
 
         
 root=UIApp()
+root.init()
 root.run()
 
 

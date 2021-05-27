@@ -485,10 +485,16 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
     int limit;
     int sum, mean, scale;
     int wave_length=0;
+    int mode=0;
     int wave_index=0;
     int replaying=0;
     int num_cycles=0;
     int stop=0;
+    int hrstep;
+    int rrstep;
+    int nextp;
+    int ind;
+    int frac;
 
     p_step <: 0; // no step to start
     while(1){
@@ -498,129 +504,217 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
                 c_step <: r;
                 break;
             }
-            case c_replay :> wave_length :{
-                c_replay :> num_cycles;
-                c_replay :> x; // current location in steps from low limit switch
-                limit = x; // do not go past this point
-                c_replay :> home; // where to go to when finished
+            case c_replay :> mode :{ // mode = 1 : waveform play, mode = 2 : pulse table play
+                if(mode==1){ // play waveform
+                    c_replay :> wave_length;
+                    c_replay :> num_cycles;
+                    c_replay :> x; // current location in steps from low limit switch
+                    limit = x; // do not go past this point
+                    c_replay :> home; // where to go to when finished
 
-                sum=0;
-                for(i=0;i<wave_length;i++){
-                    sum=sum+waveform2[i];
-                }
-                mean=sum/wave_length;
-                for(i=0;i<wave_length;i++){
-                    waveform2[i]-=mean;
-                }
-                adjust_mean=mean;
-                adjust_scale=INIT_SCALE;
-                // go to first position
-                pos=transform(waveform2[0]);
-                if(x>pos){
-                    while(x>pos){
-                        safe_step(-100000, x, limit);
-                        x=x-1;
+                    sum=0;
+                    for(i=0;i<wave_length;i++){
+                        sum=sum+waveform2[i];
                     }
-                }else{
-                    if(x<pos){
-                        while(x<pos){
-                            safe_step(100000, x, limit);
-                            x=x+1;
+                    mean=sum/wave_length;
+                    for(i=0;i<wave_length;i++){
+                        waveform2[i]-=mean;
+                    }
+                    adjust_mean=mean;
+                    adjust_scale=INIT_SCALE;
+                    // go to first position
+                    pos=transform(waveform2[0]);
+                    if(x>pos){
+                        while(x>pos){
+                            safe_step(-100000, x, limit);
+                            x=x-1;
+                        }
+                    }else{
+                        if(x<pos){
+                            while(x<pos){
+                                safe_step(100000, x, limit);
+                                x=x+1;
+                            }
                         }
                     }
-                }
                 // now just wait a second to settle
-                tmr :> t;
-                t+=100000000;
-                tmr when timerafter(t) :> void;
-                c_replay <: mean; // handshake
-                replaying=1;
-                wave_index=1;
-                tmr :> t;
-                t0=t;
-                tnext=t+2000000;
+                    tmr :> t;
+                    t+=100000000;
+                    tmr when timerafter(t) :> void;
+                    c_replay <: mean; // handshake
+                    replaying=1;
+                    wave_index=1;
+                    tmr :> t;
+                    t0=t;
+                    tnext=t+2000000;
+                }else{
+                    if(mode==2){ // play pulse table
+                        c_replay :> hrstep; // heart rate table step in X.8 format
+                        c_replay :> rrstep; // resp. rate table step in X.8 format
+                        c_replay :> x; // current location in steps from low limit switch
+                        limit = x; // do not go past this point
+                        c_replay :> home; // where to go to when finished
+
+                        pos=waveform2[0];
+                        if(x>pos){
+                            while(x>pos){
+                                safe_step(-100000, x, limit);
+                                x=x-1;
+                            }
+                        }else{
+                            if(x<pos){
+                                while(x<pos){
+                                    safe_step(100000, x, limit);
+                                    x=x+1;
+                                }
+                            }
+                        }
+                        // now just wait a second to settle
+                        tmr :> t;
+                        t+=100000000;
+                        tmr when timerafter(t) :> void;
+                        c_replay <: 0; // handshake
+                        replaying=1;
+                        wave_index=hrstep;
+                        tmr :> t;
+                        t0=t;
+                        tnext=t+2000000;
+                    }
+                }
                 break;
             }
             default:{
                 if(replaying){
-                    if(wave_index<wave_length){
-                         dp=transform(waveform2[wave_index])-pos;
-                         if(dp>0){
-                             dt=(tnext-t0)/dp;
-                         }else{
-                             if(dp<0){
-                                 dt=(tnext-t0)/(-dp);
-                             }else{
-                                 dt=2000000;
-                             }
-                         }
-                         if(dp==0){
-                             delay_ticks(dt);
-                         }else{
-                             dt=dt-450; // setup time
-                             if(dt<MIN_STEP_TIME){ // don't let it go too fast
-                                 dt=MIN_STEP_TIME;
-                             }
-                             while(pos!=transform(waveform2[wave_index])){
-                                 if(pos<transform(waveform2[wave_index])){
-                                     { r, t0 } = nonblocking_safe_step(dt, pos, limit);
-                                     pos++;
-                                 }else{
-                                     if(pos>transform(waveform2[wave_index])){
-                                         { r, t0} = nonblocking_safe_step(-dt, pos, limit);
-                                         pos--;
-                                     }
-                                 }
-                                 if(pos==transform(waveform2[wave_index])){
+                    if(mode==1){
+                        if(wave_index<wave_length){
+                            dp=transform(waveform2[wave_index])-pos;
+                            if(dp>0){
+                                dt=(tnext-t0)/dp;
+                            }else{
+                                if(dp<0){
+                                    dt=(tnext-t0)/(-dp);
+                                }else{
+                                    dt=2000000;
+                                }
+                            }
+                            if(dp==0){
+                                delay_ticks(dt);
+                            }else{
+                                dt=dt-450; // setup time
+                                if(dt<MIN_STEP_TIME){ // don't let it go too fast
+                                    dt=MIN_STEP_TIME;
+                                }
+                                while(pos!=transform(waveform2[wave_index])){
+                                    if(pos<transform(waveform2[wave_index])){
+                                        { r, t0 } = nonblocking_safe_step(dt, pos, limit);
+                                        pos++;
+                                    }else{
+                                        if(pos>transform(waveform2[wave_index])){
+                                            { r, t0} = nonblocking_safe_step(-dt, pos, limit);
+                                            pos--;
+                                        }
+                                    }
+                                    if(pos==transform(waveform2[wave_index])){
+                                        c_adjust <: 1;
+                                        c_adjust :> adjust_mean;
+                                        c_adjust :> adjust_scale;
+                                        c_adjust :> stop;
+                                        tmr when timerafter(t0) :> void;
+                                        break;
+                                    }
+                                    if(!r){ // did the step error out ?
+                                        tmr :> t0;
+                                        t0+=((dt>0)?dt:-dt);
+                                    }
+                                    tmr when timerafter(t0) :> void;
+                                }
+                            }
+                            tnext=tnext+2000000;
+                            tmr :> t0;
+                            wave_index++;
+                        }else{ // hit the index==wave_length
+                            if((num_cycles<0)&&!stop){
+                                wave_index=1;
+                                pos=transform(waveform2[0]);
+                            }else{
+                                if(stop){
+                                    num_cycles=0;
+                                }else{
+                                    num_cycles--;
+                                }
+                                if(num_cycles){
+                                    wave_index=1;
+                                    pos=transform(waveform2[0]);
+                                }else{
+                                    replaying=0;
+                                    if(pos>home){ // send it home so pressure can be normalized
+                                        while(pos>home){
+                                            safe_step(-100000, pos, limit);
+                                            pos=pos-1;
+                                        }
+                                    }else{
+                                        if(pos<home){
+                                            while(pos<home){
+                                                safe_step(100000, pos, limit);
+                                                pos=pos+1;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }else if(mode==2){
+                        ind=hrstep>>8;
+                        frac=hrstep&0xFF;
+                        nextp=(waveform2[ind]*(256-frac)+waveform2[ind+1]*frac)>>8; // interpolate
+                        dp=nextp-pos;
+                        if(dp>0){
+                            dt=(tnext-t0)/dp;
+                        }else{
+                            if(dp<0){
+                                dt=(tnext-t0)/(-dp);
+                            }else{
+                                dt=2000000;
+                            }
+                        }
+                        if(dp==0){
+                            delay_ticks(dt);
+                        }else{
+                            dt=dt-450; // setup time
+                            if(dt<MIN_STEP_TIME){ // don't let it go too fast
+                                dt=MIN_STEP_TIME;
+                            }
+                            while(pos!=nextp){
+                                if(pos<nextp){
+                                    { r, t0 } = nonblocking_safe_step(dt, pos, limit);
+                                    pos++;
+                                }else{
+                                    if(pos>nextp){
+                                       { r, t0} = nonblocking_safe_step(-dt, pos, limit);
+                                       pos--;
+                                    }
+                                }
+                                if(pos==nextp){
                                      c_adjust <: 1;
                                      c_adjust :> adjust_mean;
                                      c_adjust :> adjust_scale;
                                      c_adjust :> stop;
                                      tmr when timerafter(t0) :> void;
                                      break;
-                                 }
-                                 if(!r){ // did the step error out ?
-                                     tmr :> t0;
-                                     t0+=((dt>0)?dt:-dt);
-                                 }
-                                 tmr when timerafter(t0) :> void;
-                             }
-                         }
-                         tnext=tnext+2000000;
-                         tmr :> t0;
-                         wave_index++;
-                    }else{
-                        if((num_cycles<0)&&!stop){
-                            wave_index=1;
-                            pos=transform(waveform2[0]);
-                        }else{
-                            if(stop){
-                                num_cycles=0;
-                            }else{
-                                num_cycles--;
-                            }
-                            if(num_cycles){
-                                wave_index=1;
-                                pos=transform(waveform2[0]);
-                            }else{
-                                replaying=0;
-                                if(pos>home){ // send it home so pressure can be normalized
-                                    while(pos>home){
-                                        safe_step(-100000, pos, limit);
-                                        pos=pos-1;
-                                    }
-                                }else{
-                                    if(pos<home){
-                                        while(pos<home){
-                                            safe_step(100000, pos, limit);
-                                            pos=pos+1;
-                                        }
-                                    }
                                 }
+                                if(!r){ // did the step error out ?
+                                    tmr :> t0;
+                                    t0+=((dt>0)?dt:-dt);
+                                }
+                                tmr when timerafter(t0) :> void;
                             }
                         }
+                        tnext=tnext+2000000;
+                        tmr :> t0;
+                        wave_index+=hrstep;
+                        wave_index=wave_index&0xFFFF; // wrap around
                     }
-                }else{
+                }else{ // not replaying, just check buttons
                     if(up_button()){
                         step(100000);
                     }else if(down_button()){
@@ -649,7 +743,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
     int n;
     int steps;
     int lowsteps, highsteps, lowsteps0, highsteps0;
-
+    int hrstep, rrstep;
     int home;
     int waveforming;
     int wave_index=0;
@@ -736,6 +830,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                                             c_pressure :> n;
                                             c_pressure :> highsteps;
                                             c_pressure :> home;
+                                            c_replay <: 1; // waveform play mode
                                             c_replay <: wave_length;
                                             c_replay <: n;
                                             c_replay <: highsteps;
@@ -812,9 +907,19 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                                                          }
                                                          c_pressure <: pressure;
                                                     }else{
-                                                        if(x==10){ // set parameters
-
-                                                        }
+                                                        if(x==10){ // GO with pulse table
+                                                            c_pressure :> hrstep;
+                                                            c_pressure :> rrstep;
+                                                            c_pressure :> highsteps;
+                                                            c_pressure :> home;
+                                                            c_replay <: 2; // pulse table mode
+                                                            c_replay <: hrstep;
+                                                            c_replau <: rrstep;
+                                                            c_replay <: highsteps;
+                                                            c_replay <: home;
+                                                            c_replay :> highsteps;
+                                                            c_pressure <: highsteps;
+                                                       }
                                                     }
                                                 }
                                             }
@@ -980,6 +1085,22 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
                         length = sprintf(tmp_string, "%d\r\n", mean);
                         cdc.write(tmp_string, length);
                     }
+
+                    if((value == 'T')||(value=='t')) { // GO with table (HR, RR, posnow, home)
+                        c_pressure <: 10;
+                        d=readint(cdc); // HR in 8.8 format (up to 255+255/256 BPM)
+                        c_pressure <: d;
+                        d=readint(cdc); // RR in 8.8 format (up to 255+255/256 RPM)
+                        c_pressure <: d;
+                        d=readint(cdc); // current position in steps
+                        c_pressure <: d;
+                        d=readint(cdc); // home position to go to once done
+                        c_pressure <: d;
+                        c_pressure :> mean; // handshake - mean value
+                        length = sprintf(tmp_string, "%d\r\n", mean);
+                        cdc.write(tmp_string, length);
+                    }
+
                     if((value == 'H')||(value=='h')) { // home (go to N steps from home)
                         c_pressure <: 8;
                         d=readint(cdc); // steps to go to

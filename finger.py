@@ -2,8 +2,6 @@ import serial
 import time
 import random
 
-
-
 class Pressure:
     def __init__(self):
         self.sensor_version='B' # A is 0-25psi, B is 0-300 mmHg, C is 0-25 psi
@@ -207,6 +205,28 @@ class Pressure:
         s=self.ser.readline()
         print(s)
 
+    # write a 256-long table of steps.
+    # for 60 bpm, need to advance 256 steps in 1 second, so advance 256/50=12.8 per 20ms
+    
+    def write_table(self, w):
+        if(len(w) != 256):
+            print("Error - write_table must be 256 long!")
+            return
+        s=b'W'
+        #print(s)
+        r=self.ser.write(s)
+        print(r)
+        for w0 in w:
+            #print(w0)
+            s=("D%5d\n" % w0).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+            #s=b'D'
+            #print(s)
+            r=self.ser.write(s)
+            #print(r)
+        s=b'E'
+        self.ser.write(s)
+
+
     def write_waveform(self, w):
         s=b'W'
         #print(s)
@@ -251,6 +271,22 @@ class Pressure:
             s=self.ser.readline()
         self.meansteps=int(s)
         print(s, self.meansteps)
+
+    # play a pulse table repeatedly, indexing in hr/256 steps in the table, every 20ms
+    def play_table(self, hr, rr, hsteps, home): # hr, rr, starting at hsteps, home to go to once done
+        s=("T%5d\n" % hr0).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        self.ser.write(s)
+        s=("T%5d\n" % rr0).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        self.ser.write(s)
+        s=("T%5d\n" % hsteps).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        self.ser.write(s)
+        s=("T%5d\n" % home).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        self.ser.write(s)
+        s=""
+        while(len(s)==0):
+            s=self.ser.readline()
+        self.meansteps=int(s)
+        print(s, self.meansteps)    
 
     def set_params(self, mean, scale, stop):
         self.ser.write(b'P');

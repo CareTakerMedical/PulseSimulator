@@ -662,8 +662,8 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
                             }
                         }
                     }else if(mode==2){
-                        ind=hrstep>>8;
-                        frac=hrstep&0xFF;
+                        ind=wave_index>>8;
+                        frac=wave_index&0xFF;
                         nextp=(waveform2[ind]*(256-frac)+waveform2[ind+1]*frac)>>8; // interpolate
                         dp=nextp-pos;
                         if(dp>0){
@@ -705,10 +705,27 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
                                 tmr when timerafter(t0) :> void;
                             }
                         }
-                        tnext=tnext+2000000;
-                        tmr :> t0;
-                        wave_index+=hrstep;
-                        wave_index=wave_index&0xFFFF; // wrap around
+                        if(stop){
+                            replaying=0;
+                            if(pos>home){ // send it home so pressure can be normalized
+                                while(pos>home){
+                                   safe_step(-100000, pos, limit);
+                                   pos=pos-1;
+                                }
+                            }else{
+                                if(pos<home){
+                                    while(pos<home){
+                                        safe_step(100000, pos, limit);
+                                        pos=pos+1;
+                                    }
+                                }
+                            }
+                        }else{
+                            tnext=tnext+2000000;
+                            tmr :> t0;
+                            wave_index+=hrstep;
+                            wave_index=wave_index&0xFFFF; // wrap around
+                        }
                     }
                 }else{ // not replaying, just check buttons
                     if(up_button()){
@@ -998,8 +1015,8 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
     timer tmr;
     unsigned int timer_val;
     int d, r;
-    int mean;
-    int scale=INIT_SCALE;
+    //int mean;
+    //int scale=INIT_SCALE;
     int stop=0;
 
     button_1_valid = button_2_valid = 1;
@@ -1075,8 +1092,8 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
                         c_pressure <: d;
                         d=readint(cdc); // home position to go to once done
                         c_pressure <: d;
-                        c_pressure :> mean; // handshake - mean value
-                        length = sprintf(tmp_string, "%d\r\n", mean);
+                        c_pressure :> d; // handshake - mean value
+                        length = sprintf(tmp_string, "%d\r\n", d);
                         cdc.write(tmp_string, length);
                     }
 
@@ -1090,8 +1107,8 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
                         c_pressure <: d;
                         d=readint(cdc); // home position to go to once done
                         c_pressure <: d;
-                        c_pressure :> mean; // handshake - mean value
-                        length = sprintf(tmp_string, "%d\r\n", mean);
+                        c_pressure :> d; // handshake - mean value
+                        length = sprintf(tmp_string, "%d\r\n", d);
                         cdc.write(tmp_string, length);
                     }
 
@@ -1110,7 +1127,7 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
                         c_pressure :> x;
                         length = sprintf(tmp_string, "%d\r\n", x);
                         cdc.write(tmp_string, length);
-			stop = 0; // reset any stop flag
+			            stop = 0; // reset any stop flag
                     }
                     if((value == 'C')||(value=='c')) { // calibrate
                         c_pressure <: 4;
@@ -1130,16 +1147,16 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
                         c_pressure :> x;
                         length = sprintf(tmp_string, "%d\r\n", x);
                         cdc.write(tmp_string, length);
-			stop = 0; // reset any stop flag
+                        stop = 0; // reset any stop flag
                     }
                     if((value == 'L')||(value=='l')) { // limit switches
                     }
                     if((value == 'P')||(value=='p')) { // set params
-                        d=readint(cdc); // mean steps
-                        r=readint(cdc); // scale
+                        //d=readint(cdc); // mean steps
+                        //r=readint(cdc); // scale
                         stop=readint(cdc); // should we stop
-                        mean=d;
-                        scale=r;
+                        //mean=d;
+                        //scale=r;
                     }
                 }
                 break;

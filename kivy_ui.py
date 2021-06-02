@@ -19,7 +19,7 @@ from kivy.clock import Clock
 # Note we need to pip install kivy, then pip install kivy_garden as below.
 #python -m pip install kivy_garden.graph --extra-index-url https://kivy-garden.github.io/simple/
 
-USE_PULSE_TABLE=False
+USE_PULSE_TABLE=True
 
 default_bgnd=[0.7,0.7,0.7,1]
 
@@ -284,6 +284,7 @@ class UIApp(App):
         # Now branch on whether using pulse_table (single pulse with cyclic indexing),
         # OR - whole waveform repeated. 
         if(USE_PULSE_TABLE):
+            print("Down with UPT....")
             v=self.pulse256
             minb=0.0
             maxb=8192.0
@@ -301,12 +302,14 @@ class UIApp(App):
                 x=v0[i]
                 s=round(np.interp(x, self.mmHgs, self.steps))
                 ys0.append(s)
+                i=i+1
             ys0.append(ys0[0]) # append the first value at the end for wrap-around
-            self.pressure.write_table(ys)
+            self.pressure.write_table(ys0)
             hrindex=heartrate/60.0*256.0/50.0 # index value per 20ms interval
             rrindex=resprate/60.0*256.0/50 # index value per 20ms interval
            # now convert to X.8 format
-            self.play_table(round(hrindex*256.0), round(rrindex*256.0), cm, h) 
+            print("Playing table...\n")
+            self.pressure.play_table(round(hrindex*256.0), round(rrindex*256.0), cm, h) 
  
 
         else: # single recorded waveform sequence, possibly repeated
@@ -406,9 +409,12 @@ class UIApp(App):
             self.home_event = Clock.schedule_once(self.calibrate_start_callback, 0.25)
 
     def play_stop_callback(self, x):
+        print("PLAY STOP CALLBACK")
         self.play_more_event.cancel()
-        for i in range(250): # drain any old readings
-            s=self.pressure.one_read()   
+        for i in range(50): # drain any old readings
+            s=self.pressure.one_read_timeout()
+            if(len(s)==0):
+                break
         self.pressure.stop_reading()
         self.play_button.text="Play Waveform"
         self.play_button.background_color=[0.7, 0.7, 0.7, 1];
@@ -424,7 +430,7 @@ class UIApp(App):
             self.play_event = Clock.schedule_once(self.play_calibrate_callback, 0.25)
         elif(self.state=='PLAY2'):
             print("STOPPING")
-            self.pressure.set_params(self.pressure.meansteps, 7500, 1)
+            self.pressure.set_params(1)
             self.state=None
             self.play_button.text="Stopping Waveform"
             self.play_button.background_color=[0.5, 0.5, 1, 1];

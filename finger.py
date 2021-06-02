@@ -188,6 +188,11 @@ class Pressure:
         return int(w[0]), int(w[1])
 
 
+    def one_read_timeout(self):
+        s=b""
+        s=self.readline()
+        return s
+        
     def try_read_pressure(self):
         #self.ser.write(b'R')
         s=self.ser.readline()
@@ -209,8 +214,8 @@ class Pressure:
     # for 60 bpm, need to advance 256 steps in 1 second, so advance 256/50=12.8 per 20ms
     
     def write_table(self, w):
-        if(len(w) != 256):
-            print("Error - write_table must be 256 long!")
+        if(len(w) != 257):
+            print("Error - write_table must be 257 long!")
             return
         s=b'W'
         #print(s)
@@ -274,26 +279,26 @@ class Pressure:
 
     # play a pulse table repeatedly, indexing in hr/256 steps in the table, every 20ms
     def play_table(self, hr, rr, hsteps, home): # hr, rr, starting at hsteps, home to go to once done
-        s=("T%5d\n" % hr0).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        s=("T%5d\n" % hr).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
         self.ser.write(s)
-        s=("T%5d\n" % rr0).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
+        print(s)
+        s=("T%5d\n" % rr).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
         self.ser.write(s)
+        print(s)
         s=("T%5d\n" % hsteps).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
         self.ser.write(s)
+        print(s)
         s=("T%5d\n" % home).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
         self.ser.write(s)
+        print(s)
         s=""
         while(len(s)==0):
             s=self.ser.readline()
         self.meansteps=int(s)
         print(s, self.meansteps)    
 
-    def set_params(self, mean, scale, stop):
+    def set_params(self, stop):
         self.ser.write(b'P');
-        s=("G%5d\n" % mean).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
-        self.ser.write(s)
-        s=("G%5d\n" % scale).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
-        self.ser.write(s)
         s=("G%5d\n" % stop).encode() # not sure why have to have a space in here but it avoids a repeated 1st digit
         self.ser.write(s)
         #s=self.ser.readline()

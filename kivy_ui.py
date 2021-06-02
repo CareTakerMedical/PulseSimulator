@@ -307,7 +307,7 @@ class UIApp(App):
             self.pressure.write_table(ys0)
             hrindex=heartrate/60.0*256.0/50.0 # index value per 20ms interval
             rrindex=resprate/60.0*256.0/50 # index value per 20ms interval
-           # now convert to X.8 format
+           # now convert to X.8 format`
             print("Playing table...\n")
             self.pressure.play_table(round(hrindex*256.0), round(rrindex*256.0), cm, h) 
  

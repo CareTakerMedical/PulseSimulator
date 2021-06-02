@@ -46,7 +46,8 @@ on tile[0]: in port p_nlimit = XS1_PORT_1M; // far limit switch
 #define PULSE_LEN   256
 extern int waveform[WAVE_LEN];
 extern int waveform2[WAVE_LEN]; // waveform table is aliased so two threads can use it.
-extern signed short pulse_table[PULSE_LEN];
+extern signed short sine_table_bp[PULSE_LEN+1];
+extern signed short sine_table_hr[PULSE_LEN+1];
 
 int adjust_mean;
 int adjust_scale;
@@ -471,6 +472,14 @@ static inline int transform(int x)
     return y;
 }
 
+static inline int rr_transform(int x, int rrmod)
+{
+    int y;
+    y=adjust_mean+((x*adjust_scale)>>13); // scale and add back in the mean
+    y=y+rrmod;
+    return y;
+}
+
 void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
 {
     timer tmr;
@@ -483,16 +492,19 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
     int real_pressure;
     int home;
     int limit;
-    int sum, mean, scale;
+    int sum, mean, scale, max, min, steprange;
     int wave_length=0;
     int mode=0;
     int wave_index=0;
+    int resp_index=0;
     int replaying=0;
     int num_cycles=0;
     int stop=0;
     int hrstep;
     int rrstep;
     int nextp;
+    int rrbp;
+    int rrhr;
     int ind;
     int frac;
 
@@ -555,7 +567,27 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
                         limit = x; // do not go past this point
                         c_replay :> home; // where to go to when finished
 
-                        pos=waveform2[0];
+                        sum=0;
+                        max=0;
+                        min=1e6;
+                        for(i=0;i<(PULSE_LEN+1);i++){
+                            sum=sum+waveform2[i];
+                            if(waveform2[i]>max){
+                                max=waveform2[i];
+                            }
+                            if(waveform2[i]<min){
+                                min=waveform2[i];
+                            }
+                        }
+                        steprange=max-min;
+                        mean=sum/(PULSE_LEN+1);
+                        for(i=0;i<(PULSE_LEN+1);i++){
+                            waveform2[i]-=mean;
+                        }
+                        adjust_mean=mean;
+                        adjust_scale=FULL_SCALE;
+
+                        pos=rr_transform(waveform2[0], 0);
                         if(x>pos){
                             while(x>pos){
                                 safe_step(-100000, x, limit);
@@ -576,6 +608,7 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
                         c_replay <: 0; // handshake
                         replaying=1;
                         wave_index=hrstep;
+                        resp_index=rrstep;
                         tmr :> t;
                         t0=t;
                         tnext=t+2000000;
@@ -664,7 +697,14 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
                     }else if(mode==2){
                         ind=wave_index>>8;
                         frac=wave_index&0xFF;
-                        nextp=(waveform2[ind]*(256-frac)+waveform2[ind+1]*frac)>>8; // interpolate
+                        nextp=(waveform2[ind]*(256-frac)+waveform2[ind+1]*frac)>>8; // interpolate HR table
+                        ind=resp_index>>8;
+                        frac=resp_index&0xFF;
+                        rrbp=(sine_table_bp[ind]*(256-frac)+sine_table_bp[ind+1]*frac)>>8; // interpolate RR BP sine wave
+                        //rrhr=(sine_table_hr[ind]*(256-frac)+sine_table_hr[ind+1]*frac)>>8; // interpolate RR HR sine wave
+
+                        rrbp=(steprange*rrbp)>>13;
+                        nextp=rr_transform(nextp, rrbp); // handle RR AM modulation
                         dp=nextp-pos;
                         if(dp>0){
                             dt=(tnext-t0)/dp;
@@ -725,6 +765,8 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
                             tmr :> t0;
                             wave_index+=hrstep;
                             wave_index=wave_index&0xFFFF; // wrap around
+                            resp_index+=rrstep;
+                            resp_index=resp_index&0xFFFF; // wrap around
                         }
                     }
                 }else{ // not replaying, just check buttons

@@ -616,8 +616,6 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
                                     }
                                     if(pos==transform(waveform2[wave_index])){
                                         c_adjust <: 1;
-                                        c_adjust :> adjust_mean;
-                                        c_adjust :> adjust_scale;
                                         c_adjust :> stop;
                                         tmr when timerafter(t0) :> void;
                                         break;
@@ -696,8 +694,6 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
                                 }
                                 if(pos==nextp){
                                      c_adjust <: 1;
-                                     c_adjust :> adjust_mean;
-                                     c_adjust :> adjust_scale;
                                      c_adjust :> stop;
                                      tmr when timerafter(t0) :> void;
                                      break;
@@ -914,7 +910,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                                                             c_pressure :> home;
                                                             c_replay <: 2; // pulse table mode
                                                             c_replay <: hrstep;
-                                                            c_replau <: rrstep;
+                                                            c_replay <: rrstep;
                                                             c_replay <: highsteps;
                                                             c_replay <: home;
                                                             c_replay :> highsteps;
@@ -1016,8 +1012,6 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
                 break;
             }
             case c_adjust :> x: {
-                c_adjust <: mean;
-                c_adjust <: scale;
                 c_adjust <: stop;
                 break;
             }
@@ -1116,6 +1110,7 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
                         c_pressure :> x;
                         length = sprintf(tmp_string, "%d\r\n", x);
                         cdc.write(tmp_string, length);
+			stop = 0; // reset any stop flag
                     }
                     if((value == 'C')||(value=='c')) { // calibrate
                         c_pressure <: 4;
@@ -1135,6 +1130,7 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
                         c_pressure :> x;
                         length = sprintf(tmp_string, "%d\r\n", x);
                         cdc.write(tmp_string, length);
+			stop = 0; // reset any stop flag
                     }
                     if((value == 'L')||(value=='l')) { // limit switches
                     }

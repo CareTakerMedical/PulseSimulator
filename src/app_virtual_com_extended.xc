@@ -701,7 +701,7 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
                         ind=resp_index>>8;
                         frac=resp_index&0xFF;
                         rrbp=(sine_table_bp[ind]*(256-frac)+sine_table_bp[ind+1]*frac)>>8; // interpolate RR BP sine wave
-                        //rrhr=(sine_table_hr[ind]*(256-frac)+sine_table_hr[ind+1]*frac)>>8; // interpolate RR HR sine wave
+                        rrhr=(sine_table_hr[ind]*(256-frac)+sine_table_hr[ind+1]*frac)>>8; // interpolate RR HR sine wave
 
                         rrbp=(steprange*rrbp)>>13;
                         nextp=rr_transform(nextp, rrbp); // handle RR AM modulation
@@ -763,7 +763,7 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
                         }else{
                             tnext=tnext+2000000;
                             tmr :> t0;
-                            wave_index+=hrstep;
+                            wave_index+=((hrstep*rrhr)>>8); // handle FM modulation
                             wave_index=wave_index&0xFFFF; // wrap around
                             resp_index+=rrstep;
                             resp_index=resp_index&0xFFFF; // wrap around

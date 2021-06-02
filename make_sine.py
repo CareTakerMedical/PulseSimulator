@@ -21,7 +21,7 @@ f.write(b"};\n")
 v=[]
 for i in range(256):
     t=float(i)/256.0*math.pi*2.0
-    x=int(8192.0*hrmod*(math.sin(t))) # positive as HR increases on inspiration
+    x=int(256.0*(1.0+hrmod*(math.sin(t)))) # positive as HR increases on inspiration
     print(x)
     v.append(x)
 f.write(b"\n\nshort int sine_table_hr[257]={ ")

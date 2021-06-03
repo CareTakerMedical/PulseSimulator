@@ -310,22 +310,27 @@ void app_init(client interface i2c_master_if i2c)
 
 }
 
+//#define DISABLE_MOTOR       // define to turn motor off after 10s of inactivity.
 
+#ifdef DISABLE_MOTOR
 timer disable_tmr;
 unsigned int disable_t;
 int motor_disable=0;
 
 #define DISABLE_SECONDS     10
 #define DISABLE_TIMEOUT     (100000000*DISABLE_SECONDS)
+#endif
 
 void reset_disable_timer(void)
 {
+#ifdef DISABLE_MOTOR
     disable_tmr :> disable_t;
     disable_t+=DISABLE_TIMEOUT;
     if(motor_disable){ // re-enable if needed
         motor_disable=0;
         p_disable <: 0;
     }
+#endif
 }
 
 
@@ -526,15 +531,21 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_
     int frac;
 
     p_step <: 0; // no step to start
+    p_disable <: 0; // not disabled
+#ifdef DISABLE_MOTOR
+    p_disable <: 0; // not disabled to start
     reset_disable_timer();
+#endif
     while(1){
         select{
+#ifdef DISABLE_MOTOR
             case disable_tmr when timerafter(disable_t) :> void: {
                 // here disable the motor
-                // p_disable <: 1;
-                // motor_disable = 1;
+                p_disable <: 1;
+                motor_disable = 1;
                 break;
             }
+#endif
             case c_step :> x:{
                 r=step(x);
                 c_step <: r;

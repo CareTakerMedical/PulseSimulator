@@ -180,24 +180,24 @@ class UIApp(App):
         return out
 
     def default_graph_waveform(self):
-        self.graph = Graph(xlabel='X', ylabel='Y', x_ticks_minor=5,
-              x_ticks_major=25, y_ticks_major=50,
+        self.graph = Graph(xlabel='t (s) or steps', ylabel='BP (mmHg)', x_ticks_minor=5,
+              x_ticks_major=1.0, y_ticks_major=50,
               y_grid_label=True, x_grid_label=True, padding=5,
-              x_grid=True, y_grid=True, xmin=-0, xmax=500, ymin=0, ymax=240)
+              x_grid=True, y_grid=True, xmin=-0, xmax=10.0, ymin=0, ymax=240)
         self.plot = MeshLinePlot(color=[1, 1, 1, 1])
-        self.plot.points = [(x, 5) for x in range(0, 501)]
+        self.plot.points = [(x*0.02, 5) for x in range(0, 501)]
         self.graph.add_plot(self.plot)
         
     def reset_graph_waveform(self):
         self.graph.xmin=0
-        self.graph.xmax=500
-        self.graph.x_ticks_major=25
-        self.plot.points = [(x, 5) for x in range(0, 501)]
+        self.graph.xmax=10.0
+        self.graph.x_ticks_major=1.0
+        self.plot.points = [(x*0.02, 5) for x in range(0, 501)]
 
     def read_pressure_callback(self, x):
         (p,mm,t)=self.pressure.quick_read()
         swp=self.plot.points[self.index]
-        copy=(self.index, mm)
+        copy=(self.index*0.02, mm)
         self.plot.points[self.index]=copy
         self.index=(self.index+1)%500
         self.pressure_label.text="%3.1f mmHg / %2.1f C" % (mm, t)

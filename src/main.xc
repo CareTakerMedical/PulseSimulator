@@ -27,6 +27,7 @@ int main() {
     chan c_replay;
     chan c_reset;
     chan c_adjust;
+    chan c_step_pos;
 
     /* I2C interface */
     i2c_master_if i2c[1];
@@ -42,9 +43,9 @@ int main() {
 
         on tile[0]: app_virtual_com_extended(cdc_data, c_pressure, c_waveform, c_reset, c_adjust);
 
-        on tile[0]: pressure_reader(c_pressure, c_waveform, c_step, c_replay, i2c[0], c_reset);
+        on tile[0]: pressure_reader(c_pressure, c_waveform, c_step, c_replay, i2c[0], c_reset, c_step_pos);
         on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);
-        on tile[0]: stepper(c_step, c_replay, c_adjust);
+        on tile[0]: stepper(c_step, c_replay, c_adjust, c_step_pos);
     }
     return 0;
 }

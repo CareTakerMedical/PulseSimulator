@@ -256,12 +256,16 @@ class UIApp(App):
 
     def play_more_callback(self,x):
         for a in range(10):
-            s, t=self.pressure.one_read()
-            p1=self.pressure.psi2mmHg(int(s)*self.pressure.pressure_multiplier)
-            t1=float(t)*self.pressure.temp_multiplier
-            self.plot.points[self.play_i]=(self.plot.points[self.play_i][0], p1)
-            self.play_i=(self.play_i+1)%500
-            self.pressure_label.text="%3.1f mmHg / %2.1f C" % (p1, t1)
+            R=self.pressure.one_read_timeout()
+            if(R is None):
+                break
+            else:
+                s, t=R
+                p1=self.pressure.psi2mmHg(int(s)*self.pressure.pressure_multiplier)
+                t1=float(t)*self.pressure.temp_multiplier
+                self.plot.points[self.play_i]=(self.plot.points[self.play_i][0], p1)
+                self.play_i=(self.play_i+1)%500
+                self.pressure_label.text="%3.1f mmHg / %2.1f C" % (p1, t1)
         self.play_more_event = Clock.schedule_once(self.play_more_callback, 0)   
 
     def play_calibrate_callback(self,x):
@@ -364,7 +368,7 @@ class UIApp(App):
             self.pressure.write_waveform(ys)
             self.pressure.play_waveform(-1, cm, h)
             
-        self.pressure.start_reading()
+        #self.pressure.start_reading()
         self.play_i=0
         self.play_button.background_color=[0.7, 0.7, 0.7, 1];
         self.play_button.text="Stop Playing..."
@@ -411,11 +415,11 @@ class UIApp(App):
     def play_stop_callback(self, x):
         print("PLAY STOP CALLBACK")
         self.play_more_event.cancel()
-        for i in range(50): # drain any old readings
+        for i in range(1): # drain any old readings
             s=self.pressure.one_read_timeout()
-            if(len(s)==0):
+            if(not s):
                 break
-        self.pressure.stop_reading()
+        #self.pressure.stop_reading()
         self.play_button.text="Play Waveform"
         self.play_button.background_color=[0.7, 0.7, 0.7, 1];
         
@@ -431,6 +435,7 @@ class UIApp(App):
         elif(self.state=='PLAY2'):
             print("STOPPING")
             self.pressure.set_params(1)
+            print("STOPPING")
             self.state=None
             self.play_button.text="Stopping Waveform"
             self.play_button.background_color=[0.5, 0.5, 1, 1];

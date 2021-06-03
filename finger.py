@@ -159,15 +159,35 @@ class Pressure:
             p0=int(s)*self.pressure_multiplier
             p.append(self.psi2mmHg(p0))
         return p
+
+    def readline(self):
+        s=self.ser.readline()
+        return s
     
     def one_read(self):
         r,s=self.read2ints()
         #self.reads.append(r)
         return r,s
 
-    def readline(self):
-        s=self.ser.readline()
-        return s
+
+    def read2ints_timeout(self):
+        s=b""
+        while(len(s)==0):
+            s=self.readline()
+            if(len(s)==0):
+                break
+        if(len(s)):
+            s=s[:-2]
+            w=s.split(b",")
+            return int(w[0]), int(w[1])
+        else:
+            return None
+
+
+    def one_read_timeout(self):
+        r=self.read2ints_timeout()
+        return r
+
 
     def readint(self):
         s=b""
@@ -188,10 +208,7 @@ class Pressure:
         return int(w[0]), int(w[1])
 
 
-    def one_read_timeout(self):
-        s=b""
-        s=self.readline()
-        return s
+ 
         
     def try_read_pressure(self):
         #self.ser.write(b'R')

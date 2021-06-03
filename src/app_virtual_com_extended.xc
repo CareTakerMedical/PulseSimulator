@@ -38,6 +38,9 @@ on tile[0]: out port p_reset = XS1_PORT_1H;
 
 on tile[0]: out port p_step = XS1_PORT_1I;  // gecko step pulse 0-1 steps it
 on tile[0]: out port p_dir = XS1_PORT_1J;   // gecko direction
+on tile[0]: out port p_disable = XS1_PORT_1K; // gecko disable
+on tile[0]: out port p_fan_on = XS1_PORT_1L; // Fan ON
+
 
 on tile[0]: in port p_flimit = XS1_PORT_1N; // near limit switch
 on tile[0]: in port p_nlimit = XS1_PORT_1M; // far limit switch
@@ -236,16 +239,7 @@ int pressure_range=25000; // output in mPSI
         return {0xff, n};
     }
 
-#ifdef USE_EOC // use end of conversion flag ?
-    while(1){
-        p_eoc :> x;
-        if(x){
-            break;
-        }
-    }
-#else
     delay_ticks(500000); // 5ms
-#endif
     data[0]=0xff;
     data[1]=0xfe;
     data[2]=0xfd;
@@ -480,7 +474,7 @@ static inline int rr_transform(int x, int rrmod)
     return y;
 }
 
-void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
+void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_pos)
 {
     timer tmr;
     unsigned int t, t0, tnext;
@@ -705,6 +699,7 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
 
                         rrbp=(steprange*rrbp)>>13;
                         nextp=rr_transform(nextp, rrbp); // handle RR AM modulation
+                        c_step_pos <: nextp; // pass on the current position
                         dp=nextp-pos;
                         if(dp>0){
                             dt=(tnext-t0)/dp;
@@ -783,12 +778,12 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust)
     }
 }
 
-void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, chanend c_replay, client interface i2c_master_if i2c, chanend c_reset)
+void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, chanend c_replay, client interface i2c_master_if i2c, chanend c_reset, chanend c_step_pos)
 {
     timer tmr;
     unsigned int t;
-    int reading;
-    int rt_reading;
+    int reading=0;
+    int rt_reading=0;
     unsigned char status;
     int pressure;
     int temp;
@@ -800,6 +795,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
     int lowsteps, highsteps, lowsteps0, highsteps0;
     int hrstep, rrstep;
     int home;
+    int last_pos;
     int waveforming;
     int wave_index=0;
     int wave_length=0;
@@ -994,6 +990,10 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                 }
                 break;
             }
+            case c_step_pos :> last_pos : { // get the current step pos
+                rt_reading = 1; // flag read needed
+                break;
+            }
             case reading => tmr when timerafter(t) :> void: {
                 t+=2000000; /* 50 Hz */
                 { status, pressure} =read_pressure(i2c);
@@ -1005,12 +1005,24 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                 temp=read_temperature(i2c);
                 c_pressure <: pressure;
                 c_pressure <: temp;
+                //c_pressure <: last_pos;
 
                 break;
             }
 
             default:{
-
+                if(rt_reading){
+                    { status, pressure} =read_pressure(i2c);
+                    if(status==0xff){
+                        pressure=-1;
+                    }else{
+                        pressure=((pressure>>8)*pressure_range)>>16;
+                    }
+                    temp=read_temperature(i2c);
+                    c_pressure <: pressure;
+                    c_pressure <: temp;
+                    rt_reading=0; // clear it.
+                }
                 break;
             }
         }
@@ -1056,7 +1068,7 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
     unsigned int button_1_valid, button_2_valid;
     timer tmr;
     unsigned int timer_val;
-    int d, r;
+    int d, r, pos;
     //int mean;
     //int scale=INIT_SCALE;
     int stop=0;
@@ -1066,7 +1078,9 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
         select{
             case c_pressure :> x : {
                 c_pressure :> t;
+                //c_pressure :> pos;
                 length = sprintf(tmp_string, "%d,%d\r\n", x, t);
+                //length = sprintf(tmp_string, "%d,%d,%d\r\n", x, t, pos);
                 cdc.write(tmp_string, length);
                 break;
             }

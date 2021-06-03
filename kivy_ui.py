@@ -20,6 +20,7 @@ from kivy.clock import Clock
 #python -m pip install kivy_garden.graph --extra-index-url https://kivy-garden.github.io/simple/
 
 USE_PULSE_TABLE=True
+SAVEFILE_NAME="data.dat"
 
 default_bgnd=[0.7,0.7,0.7,1]
 
@@ -40,6 +41,7 @@ class UIApp(App):
         self.read_pulse_table()
 
     def build(self):
+        self.savef=None
         self.state=None
         self.baselineHR=60.0 # baseline HR
         self.Ts=1.0/50.0 # sampling period
@@ -212,6 +214,7 @@ class UIApp(App):
     def calibrate_inc_callback(self,x):
         p=self.pressure.one_calibrate(self.calib_inc, self.calib_delay)
         if(p>=self.calib_max):
+            print("End calibrate")
             self.pressure.end_calibrate()
             self.state=None
             self.calib_button.text="Calibrate"
@@ -220,7 +223,7 @@ class UIApp(App):
             self.home_event = Clock.schedule_once(self.calibrate_inc_callback, 0.0)
         print(self.calib_index, self.pressure.calib_mmHg, len(self.plot.points))
         self.plot.points[self.calib_index]=(self.pressure.calib_s[self.calib_index], self.pressure.calib_mmHg[self.calib_index])
-        print(self.plot.points)
+        #print(self.plot.points)
         self.calib_index=self.calib_index+1
         return False
 
@@ -255,17 +258,27 @@ class UIApp(App):
         return False
 
     def play_more_callback(self,x):
+        out=[]
         for a in range(10):
             R=self.pressure.one_read_timeout()
             if(R is None):
                 break
             else:
-                s, t=R
+                s, t, pos = R
+                p0=np.interp(pos, self.steps, self.mmHgs)
+                
                 p1=self.pressure.psi2mmHg(int(s)*self.pressure.pressure_multiplier)
                 t1=float(t)*self.pressure.temp_multiplier
+                #print(p0,p1)
+                out.append(p0)
+                out.append(p1)
                 self.plot.points[self.play_i]=(self.plot.points[self.play_i][0], p1)
                 self.play_i=(self.play_i+1)%500
                 self.pressure_label.text="%3.1f mmHg / %2.1f C" % (p1, t1)
+        if(self.savef):
+            #print(out)
+            s=struct.pack("{}f".format(len(out)), *out)
+            self.savef.write(s)
         self.play_more_event = Clock.schedule_once(self.play_more_callback, 0)   
 
     def play_calibrate_callback(self,x):
@@ -373,6 +386,7 @@ class UIApp(App):
         self.play_button.background_color=[0.7, 0.7, 0.7, 1];
         self.play_button.text="Stop Playing..."
         self.state="PLAY2"
+        self.savef=open(SAVEFILE_NAME, "wb")
         self.play_more_event = Clock.schedule_once(self.play_more_callback, 0)
         return False
 
@@ -414,6 +428,9 @@ class UIApp(App):
 
     def play_stop_callback(self, x):
         print("PLAY STOP CALLBACK")
+        if(self.savef):
+            self.savef.close()
+            self.savef=None
         self.play_more_event.cancel()
         for i in range(1): # drain any old readings
             s=self.pressure.one_read_timeout()

@@ -170,7 +170,7 @@ class Pressure:
         return r,s
 
 
-    def read2ints_timeout(self):
+    def read3ints_timeout(self):
         s=b""
         while(len(s)==0):
             s=self.readline()
@@ -179,13 +179,13 @@ class Pressure:
         if(len(s)):
             s=s[:-2]
             w=s.split(b",")
-            return int(w[0]), int(w[1])
+            return int(w[0]), int(w[1]), int(w[2])
         else:
             return None
 
 
     def one_read_timeout(self):
-        r=self.read2ints_timeout()
+        r=self.read3ints_timeout()
         return r
 
 

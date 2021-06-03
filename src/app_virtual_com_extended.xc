@@ -1005,6 +1005,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                 temp=read_temperature(i2c);
                 c_pressure <: pressure;
                 c_pressure <: temp;
+                c_pressure <: -1000; // impossible position
                 //c_pressure <: last_pos;
 
                 break;
@@ -1021,6 +1022,7 @@ void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, cha
                     temp=read_temperature(i2c);
                     c_pressure <: pressure;
                     c_pressure <: temp;
+                    c_pressure <: last_pos;
                     rt_reading=0; // clear it.
                 }
                 break;
@@ -1078,9 +1080,12 @@ void app_virtual_com_extended(client interface usb_cdc_interface cdc,  chanend c
         select{
             case c_pressure :> x : {
                 c_pressure :> t;
-                //c_pressure :> pos;
-                length = sprintf(tmp_string, "%d,%d\r\n", x, t);
-                //length = sprintf(tmp_string, "%d,%d,%d\r\n", x, t, pos);
+                c_pressure :> pos;
+                if(pos<0){
+                    length = sprintf(tmp_string, "%d,%d\r\n", x, t);
+                }else{
+                    length = sprintf(tmp_string, "%d,%d,%d\r\n", x, t, pos);
+                }
                 cdc.write(tmp_string, length);
                 break;
             }

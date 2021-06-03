@@ -310,6 +310,26 @@ void app_init(client interface i2c_master_if i2c)
 
 }
 
+
+timer disable_tmr;
+unsigned int disable_t;
+int motor_disable=0;
+
+#define DISABLE_SECONDS     10
+#define DISABLE_TIMEOUT     (100000000*DISABLE_SECONDS)
+
+void reset_disable_timer(void)
+{
+    disable_tmr :> disable_t;
+    disable_t+=DISABLE_TIMEOUT;
+    if(motor_disable){ // re-enable if needed
+        motor_disable=0;
+        p_disable <: 0;
+    }
+}
+
+
+
 #define MIN_STEP_TIME   9000
 
 
@@ -320,6 +340,7 @@ int step(int x)
     int dir;
     unsigned int t, t0;
 
+    reset_disable_timer();
     if(x>0){ // handle far limit switch
          if(far_limit()){
              return 1;
@@ -365,6 +386,7 @@ int safe_step(int x, int pos, int limit)
     int dir;
     unsigned int t, t0;
 
+    reset_disable_timer();
     if(x>0){ // handle far limit switch
          if(far_limit()){
              return 1;
@@ -414,6 +436,7 @@ int safe_step(int x, int pos, int limit)
     int dir;
     unsigned int t, t0;
 
+    reset_disable_timer();
     if(x>0){ // handle far limit switch
          if(far_limit()){
              return {1, 0};
@@ -503,8 +526,15 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_
     int frac;
 
     p_step <: 0; // no step to start
+    reset_disable_timer();
     while(1){
         select{
+            case disable_tmr when timerafter(disable_t) :> void: {
+                // here disable the motor
+                // p_disable <: 1;
+                // motor_disable = 1;
+                break;
+            }
             case c_step :> x:{
                 r=step(x);
                 c_step <: r;

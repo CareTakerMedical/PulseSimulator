@@ -5,7 +5,7 @@ import random
 class Pressure:
     def __init__(self):
         self.sensor_version='B' # A is 0-25psi, B is 0-300 mmHg, C is 0-25 psi
-        self.ser = serial.Serial('COM3', timeout=0.1) # open serial port
+        self.ser = serial.Serial('COM3', timeout=0.2) # open serial port
         print(self.ser.name)             # check which port was really used
         self.lastpressure=14.52
         self.lowp=-1
@@ -108,8 +108,9 @@ class Pressure:
     def home(self, n): # go to home + N steps
         self.ser.write(b'H');
         s=("G%5d\n" % n).encode()
-        self.ser.write(s);
-        p=self.readint()*self.pressure_multiplier
+        self.ser.write(s)
+        r=self.readint()
+        p=r*self.pressure_multiplier
         print("Pressure @ %d steps = %f PSI, %f mmHg" % (n, p, self.psi2mmHg(p)))
         return p
 
@@ -179,6 +180,7 @@ class Pressure:
         if(len(s)):
             s=s[:-2]
             w=s.split(b",")
+            #print(s)
             return int(w[0]), int(w[1]), int(w[2])
         else:
             return None
@@ -311,6 +313,7 @@ class Pressure:
         s=""
         while(len(s)==0):
             s=self.ser.readline()
+            print("s=:%s:" %s)
         self.meansteps=int(s)
         print(s, self.meansteps)    
 

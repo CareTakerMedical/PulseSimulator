@@ -95,7 +95,7 @@ void set_led_state(int led_id, int val)
   int value;
   /* Read port value into a variable */
   p_led :> value;
-  if (!val) {
+  if (val) {
       p_led <: (value | (1 << led_id));
   } else {
       p_led <: (value & ~(1 << led_id));
@@ -308,7 +308,7 @@ void app_init(client interface i2c_master_if i2c)
 
 
     /* Set all LEDs to OFF (Active low)*/
-    p_led <: 0x0F;
+    //p_led <: 0x0F;
     reset_sensor();
     init_temperature_sensor(i2c);
 
@@ -534,13 +534,19 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_
     int rrhr;
     int ind;
     int frac;
+    int error;
 
+    error=0; // 1,2,3,4 are error codes for LEDs.
     p_step <: 0; // no step to start
     p_disable <: 0; // not disabled
 #ifdef DISABLE_MOTOR
     p_disable <: 0; // not disabled to start
     reset_disable_timer();
 #endif
+    set_led_state(0,0);
+    set_led_state(1,0);
+    set_led_state(2,0);
+    set_led_state(3,0);
     while(1){
         select{
 #ifdef DISABLE_MOTOR
@@ -659,10 +665,13 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_
             default:{
                 if(replaying){
                     if(mode==1){
+                        //toggle_led(0);
                         if(wave_index<wave_length){
 
                             nextp=transform(waveform2[wave_index]);
                             dp=nextp-pos;
+                            c_adjust <: 1;
+                            c_adjust :> stop; // do this before telling it to read the pressure
                             c_step_pos <: nextp; // pass on the current position
                             if(dp>0){
                                 dt=(tnext-t0)/dp;
@@ -673,32 +682,35 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_
                                     dt=2000000;
                                 }
                             }
+                            if(dt>4000000){
+                                set_led_state(0,1);
+                            }
                             if(dp==0){
-                                delay_ticks(dt);
+                                tmr when timerafter(tnext) :> void; // wait until the next time
                             }else{
-                                dt=dt-450; // setup time
+                                //dt=dt-450; // setup time
                                 if(dt<MIN_STEP_TIME){ // don't let it go too fast
                                     dt=MIN_STEP_TIME;
+                                    set_led_state(1,1); // flag it
                                 }
-                                while(pos!=transform(waveform2[wave_index])){
-                                    if(pos<transform(waveform2[wave_index])){
+                                while(pos!=nextp){
+                                    if(pos<nextp){
                                         { r, t0 } = nonblocking_safe_step(dt, pos, limit);
                                         pos++;
                                     }else{
-                                        if(pos>transform(waveform2[wave_index])){
+                                        if(pos>nextp){
                                             { r, t0} = nonblocking_safe_step(-dt, pos, limit);
                                             pos--;
                                         }
                                     }
-                                    if(pos==transform(waveform2[wave_index])){
-                                        c_adjust <: 1;
-                                        c_adjust :> stop;
-                                        tmr when timerafter(t0) :> void;
-                                        break;
-                                    }
-                                    if(!r){ // did the step error out ?
+
+                                    if(r){ // did the step error out ?
                                         tmr :> t0;
                                         t0+=((dt>0)?dt:-dt);
+                                        //error=1;
+                                    }
+                                    if(error){
+                                        set_led_state(error-1, 1);
                                     }
                                     tmr when timerafter(t0) :> void;
                                 }
@@ -782,9 +794,13 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_
                                      tmr when timerafter(t0) :> void;
                                      break;
                                 }
-                                if(!r){ // did the step error out ?
+                                if(r){ // did the step error out ?
                                     tmr :> t0;
                                     t0+=((dt>0)?dt:-dt);
+                                    error=1;
+                                }
+                                if(error){
+                                    set_led_state(error-1, 1);
                                 }
                                 tmr when timerafter(t0) :> void;
                             }

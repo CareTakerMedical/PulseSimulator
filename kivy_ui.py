@@ -51,13 +51,13 @@ class UIApp(App):
         superBox = BoxLayout(orientation ='vertical') 
         HB = BoxLayout(orientation ='horizontal')
         cell1=BoxLayout(orientation='vertical')
-        self.textinputHomePos = FloatInput(text='100')
+        self.textinputHomePos = FloatInput(text='1000')
         cell1h=BoxLayout(orientation='horizontal')
         label=Label(text='Home Pos')
         cell1h.add_widget(label)
         cell1h.add_widget(self.textinputHomePos)
 
-        self.textinputCalibMax = FloatInput(text='1500')
+        self.textinputCalibMax = FloatInput(text='2000')
         cell1bh=BoxLayout(orientation='horizontal')
         label=Label(text='Calib Max')
         cell1bh.add_widget(label)
@@ -272,7 +272,7 @@ class UIApp(App):
                 
                 p1=self.pressure.psi2mmHg(int(s)*self.pressure.pressure_multiplier)
                 t1=float(t)*self.pressure.temp_multiplier
-                print(p0,p1)
+                #print(p0,p1)
                 out.append(p0)
                 out.append(p1)
                 self.plot.points[self.play_i]=(self.plot.points[self.play_i][0], p1)
@@ -282,7 +282,7 @@ class UIApp(App):
             #print(out)
             s=struct.pack("{}f".format(len(out)), *out)
             self.savef.write(s)
-        self.play_more_event = Clock.schedule_once(self.play_more_callback, 0)   
+        self.play_more_event = Clock.schedule_once(self.play_more_callback, 0.1)   
 
     def play_calibrate_callback(self,x):
         # first get our waveform parameters
@@ -444,10 +444,12 @@ class UIApp(App):
             self.savef.close()
             self.savef=None
         self.play_more_event.cancel()
-        for i in range(1): # drain any old readings
+        for i in range(10): # drain any old readings
             s=self.pressure.one_read_timeout()
-            if(not s):
-                break
+            print(i,s)
+            #if(not s):
+            #    break
+        print("Done draining...")
         #self.pressure.stop_reading()
         self.play_button.text="Play Waveform"
         self.play_button.background_color=[0.7, 0.7, 0.7, 1];

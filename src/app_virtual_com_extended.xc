@@ -240,6 +240,7 @@ int pressure_range=25000; // output in mPSI
     }
 
     delay_ticks(500000); // 5ms
+
     data[0]=0xff;
     data[1]=0xfe;
     data[2]=0xfd;
@@ -272,6 +273,7 @@ void reset_sensor(void)
 
 }
 
+#define DUMMY_TEMP
 
 //inline uint16_t read_reg16_addr8(client interface i2c_master_if i,
 //                                   uint8_t device_addr, uint8_t reg,
@@ -280,13 +282,16 @@ void reset_sensor(void)
 int read_temperature(client interface i2c_master_if i2c) {
     i2c_regop_res_t result;
     int t;
-
+#ifdef DUMMY_TEMP
+    t=0;
+#else
     t=i2c.read_reg16_addr8(TEMP_I2C_ADDR, TEMP_REG, result);
     if(result!=I2C_REGOP_SUCCESS){
        t=-100000;
     }else{
         t=t&0xFFF; // 12 bits
     }
+#endif
     return t;
 }
 
@@ -655,7 +660,10 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_
                 if(replaying){
                     if(mode==1){
                         if(wave_index<wave_length){
-                            dp=transform(waveform2[wave_index])-pos;
+
+                            nextp=transform(waveform2[wave_index]);
+                            dp=nextp-pos;
+                            c_step_pos <: nextp; // pass on the current position
                             if(dp>0){
                                 dt=(tnext-t0)/dp;
                             }else{

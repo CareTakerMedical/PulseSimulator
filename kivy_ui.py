@@ -19,7 +19,8 @@ from kivy.clock import Clock
 # Note we need to pip install kivy, then pip install kivy_garden as below.
 #python -m pip install kivy_garden.graph --extra-index-url https://kivy-garden.github.io/simple/
 
-USE_PULSE_TABLE=True
+USE_PULSE_TABLE=False
+SAVE_FILE=False
 SAVEFILE_NAME="data.dat"
 
 default_bgnd=[0.7,0.7,0.7,1]
@@ -43,7 +44,7 @@ class UIApp(App):
     def build(self):
         self.savef=None
         self.state=None
-        self.baselineHR=60.0 # baseline HR
+        self.baselineHR=42.252 # baseline HR
         self.Ts=1.0/50.0 # sampling period
         self.modulation=0.1 # how much to modulate the pressure wave via RR
         self.pressure=Pressure()
@@ -160,11 +161,12 @@ class UIApp(App):
         return superBox
 
     def read_pulse_table(self):
+        print("Reading pulse table\n")
         f=open('pulse256.dat', 'rb')
         a=f.read()
         f.close()
         self.pulse256=struct.unpack("256h", a)
-        #print(self.pulse256)        
+        print(self.pulse256)        
 
     def resample_HR(self, values, heartrate):
         out=[]
@@ -221,7 +223,7 @@ class UIApp(App):
             self.calib_button.background_color=[0.7, 0.7, 0.7, 1];
         else:
             self.home_event = Clock.schedule_once(self.calibrate_inc_callback, 0.0)
-        print(self.calib_index, self.pressure.calib_mmHg, len(self.plot.points))
+        #print(self.calib_index, self.pressure.calib_mmHg, len(self.plot.points))
         self.plot.points[self.calib_index]=(self.pressure.calib_s[self.calib_index], self.pressure.calib_mmHg[self.calib_index])
         #print(self.plot.points)
         self.calib_index=self.calib_index+1
@@ -262,6 +264,7 @@ class UIApp(App):
         for a in range(10):
             R=self.pressure.one_read_timeout()
             if(R is None):
+                print("TIMEOUT")
                 break
             else:
                 s, t, pos = R
@@ -269,7 +272,7 @@ class UIApp(App):
                 
                 p1=self.pressure.psi2mmHg(int(s)*self.pressure.pressure_multiplier)
                 t1=float(t)*self.pressure.temp_multiplier
-                #print(p0,p1)
+                print(p0,p1)
                 out.append(p0)
                 out.append(p1)
                 self.plot.points[self.play_i]=(self.plot.points[self.play_i][0], p1)
@@ -321,15 +324,18 @@ class UIApp(App):
                 ys0.append(s)
                 i=i+1
             ys0.append(ys0[0]) # append the first value at the end for wrap-around
+            print(ys0)
             self.pressure.write_table(ys0)
+            print(heartrate, resprate)
             hrindex=heartrate/60.0*256.0/50.0 # index value per 20ms interval
-            rrindex=resprate/60.0*256.0/50 # index value per 20ms interval
+            rrindex=resprate/60.0*256.0/50.0 # index value per 20ms interval
            # now convert to X.8 format`
-            print("Playing table...\n")
+            print("Playing table...HR index %f RR index %f\n" % (hrindex, rrindex))
             self.pressure.play_table(round(hrindex*256.0), round(rrindex*256.0), cm, h) 
  
 
         else: # single recorded waveform sequence, possibly repeated
+            print("PLAYING WAVEFORM")
             f=open('TestPulses.dat', 'rb')
             a=f.readlines()
             f.close()
@@ -338,10 +344,12 @@ class UIApp(App):
                 x=float(l)
                 values.append(x)
        
-            v=values[:-20]
+          
+            print("Baseline %f, heartrate %f" % (self.baselineHR, heartrate)) 
             if(not (self.baselineHR==heartrate)):
                 print("RESAMPLING @ %f from %f" % (heartrate, self.baselineHR))
                 values=self.resample_HR(values, heartrate)
+            v=values[:-20]
             minb=50000
             maxb=-50000
             for b in v:
@@ -369,7 +377,7 @@ class UIApp(App):
             while(i <(len(v0))):
                 x=v0[i]
                 s=round(np.interp(x, self.mmHgs, self.steps))
-                i=i+25
+                i=i+10
                 ts.append(t)
                 t=t+dt
                 ys0.append(s)
@@ -378,6 +386,7 @@ class UIApp(App):
                 for y in ys0:
                     ys.append(y)
             print(len(ys))
+            print(ys)
             self.pressure.write_waveform(ys)
             self.pressure.play_waveform(-1, cm, h)
             
@@ -386,7 +395,10 @@ class UIApp(App):
         self.play_button.background_color=[0.7, 0.7, 0.7, 1];
         self.play_button.text="Stop Playing..."
         self.state="PLAY2"
-        self.savef=open(SAVEFILE_NAME, "wb")
+        if(SAVE_FILE):
+            self.savef=open(SAVEFILE_NAME, "wb")
+        else:
+            self.savef=None
         self.play_more_event = Clock.schedule_once(self.play_more_callback, 0)
         return False
 

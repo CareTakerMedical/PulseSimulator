@@ -760,6 +760,8 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_
 
                         rrbp=(steprange*rrbp)>>13;
                         nextp=rr_transform(nextp, rrbp); // handle RR AM modulation
+                        c_adjust <: 1;
+                        c_adjust :> stop; // do this before telling it to read the pressure
                         c_step_pos <: nextp; // pass on the current position
                         dp=nextp-pos;
                         if(dp>0){
@@ -772,9 +774,8 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_
                             }
                         }
                         if(dp==0){
-                            delay_ticks(dt);
+                            tmr when timerafter(tnext) :> void; // wait until the next time
                         }else{
-                            dt=dt-450; // setup time
                             if(dt<MIN_STEP_TIME){ // don't let it go too fast
                                 dt=MIN_STEP_TIME;
                             }
@@ -787,12 +788,6 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_
                                        { r, t0} = nonblocking_safe_step(-dt, pos, limit);
                                        pos--;
                                     }
-                                }
-                                if(pos==nextp){
-                                     c_adjust <: 1;
-                                     c_adjust :> stop;
-                                     tmr when timerafter(t0) :> void;
-                                     break;
                                 }
                                 if(r){ // did the step error out ?
                                     tmr :> t0;

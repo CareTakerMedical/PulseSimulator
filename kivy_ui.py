@@ -19,7 +19,7 @@ from kivy.clock import Clock
 # Note we need to pip install kivy, then pip install kivy_garden as below.
 #python -m pip install kivy_garden.graph --extra-index-url https://kivy-garden.github.io/simple/
 
-USE_PULSE_TABLE=False
+USE_PULSE_TABLE=True
 SAVE_FILE=False
 SAVEFILE_NAME="data.dat"
 

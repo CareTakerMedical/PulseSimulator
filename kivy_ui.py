@@ -444,7 +444,7 @@ class UIApp(App):
             self.savef.close()
             self.savef=None
         self.play_more_event.cancel()
-        for i in range(10): # drain any old readings
+        for i in range(2): # drain any old readings
             s=self.pressure.one_read_timeout()
             print(i,s)
             #if(not s):

@@ -11,6 +11,10 @@
 on tile[0]: port p_scl = XS1_PORT_1E;
 on tile[0]: port p_sda = XS1_PORT_1F;
 
+on tile[0]: port p_scl2 = XS1_PORT_1P;
+on tile[0]: port p_sda2 = XS1_PORT_1O;
+
+
 /* USB Endpoint Defines */
 #define XUD_EP_COUNT_OUT   2    //Includes EP0 (1 OUT EP0 + 1 BULK OUT EP)
 #define XUD_EP_COUNT_IN    3    //Includes EP0 (1 IN EP0 + 1 INTERRUPT IN EP + 1 BULK IN EP)
@@ -31,6 +35,7 @@ int main() {
 
     /* I2C interface */
     i2c_master_if i2c[1];
+    i2c_master_if i2c2[1];
 
     par
     {
@@ -43,8 +48,9 @@ int main() {
 
         on tile[0]: app_virtual_com_extended(cdc_data, c_pressure, c_waveform, c_reset, c_adjust);
 
-        on tile[0]: pressure_reader(c_pressure, c_waveform, c_step, c_replay, i2c[0], c_reset, c_step_pos);
-        on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);
+        on tile[0]: pressure_reader(c_pressure, c_waveform, c_step, c_replay, i2c[0], i2c2[0], c_reset, c_step_pos);
+        on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 100);
+        on tile[0]: i2c_master(i2c2, 1, p_scl2, p_sda2, 100);
         on tile[0]: stepper(c_step, c_replay, c_adjust, c_step_pos);
     }
     return 0;

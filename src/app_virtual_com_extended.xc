@@ -273,7 +273,7 @@ void reset_sensor(void)
 
 }
 
-#define DUMMY_TEMP
+//#define DUMMY_TEMP
 
 //inline uint16_t read_reg16_addr8(client interface i2c_master_if i,
 //                                   uint8_t device_addr, uint8_t reg,
@@ -838,7 +838,7 @@ void stepper(chanend c_step, chanend c_replay, chanend c_adjust, chanend c_step_
     }
 }
 
-void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, chanend c_replay, client interface i2c_master_if i2c, chanend c_reset, chanend c_step_pos)
+void pressure_reader(chanend c_pressure, chanend c_waveform, chanend c_step, chanend c_replay, client interface i2c_master_if i2c, client interface i2c_master_if i2c2, chanend c_reset, chanend c_step_pos)
 {
     timer tmr;
     unsigned int t;

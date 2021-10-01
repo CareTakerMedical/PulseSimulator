@@ -11,6 +11,9 @@
 #define VENDOR_ID   0x20B1
 #define PRODUCT_ID  0x0401
 
+//Interface Association Descriptor
+#define USB_IAD 0x0B
+
 /* USB Sub class and protocol codes */
 #define USB_CDC_ACM_SUBCLASS        0x02
 #define USB_CDC_AT_COMMAND_PROTOCOL 0x01
@@ -18,13 +21,8 @@
 /* CDC interface descriptor type */
 #define USB_DESCTYPE_CS_INTERFACE   0x24
 
-/* Endpoint Addresses for CDC device */
-#define CDC_NOTIFICATION_EP_NUM     1
-#define CDC_DATA_RX_EP_NUM          1
-#define CDC_DATA_TX_EP_NUM          2
-
 /* Data endpoint packet size */
-#define MAX_EP_SIZE     512
+#define MAX_EP_SIZE     1024
 
 /* CDC Communications Class requests */
 #define CDC_SET_LINE_CODING         0x20
@@ -40,9 +38,9 @@ static unsigned char devDesc[] =
     USB_DESCTYPE_DEVICE,   /* 1  bdescriptorType - Device*/
     0x00,                  /* 2  bcdUSB version */
     0x02,                  /* 3  bcdUSB version */
-    USB_CLASS_COMMUNICATIONS,/* 4  bDeviceClass - USB CDC Class */
-    0x00,                  /* 5  bDeviceSubClass  - Specified by interface */
-    0x00,                  /* 6  bDeviceProtocol  - Specified by interface */
+    0xEF,		   /* 4 bDeviceClass - Miscellaneous */
+    0x02,                  /* 5  bDeviceSubClass  - Specified by interface */
+    0x01,                  /* 6  bDeviceProtocol  - Specified by interface */
     0x40,                  /* 7  bMaxPacketSize for EP0 - max = 64*/
     (VENDOR_ID & 0xFF),    /* 8  idVendor */
     (VENDOR_ID >> 8),      /* 9  idVendor */
@@ -56,22 +54,35 @@ static unsigned char devDesc[] =
     0x01                   /* 17 bNumConfigurations */
 };
 
+#define CFG_LEN 0x8D
+#define STRINGINDEX 0x00
+
 /* USB Configuration Descriptor */
 static unsigned char cfgDesc[] = {
 
   0x09,                       /* 0  bLength */
   USB_DESCTYPE_CONFIGURATION, /* 1  bDescriptortype - Configuration*/
-  0x43, 0x00,                 /* 2  wTotalLength */
-  0x02,                       /* 4  bNumInterfaces */
+  CFG_LEN, 0x00,                 /* 2  wTotalLength */
+  0x04,                       /* 4  bNumInterfaces */
   0x01,                       /* 5  bConfigurationValue */
-  0x04,                       /* 6  iConfiguration - index of string */
+  0x00,                       /* 6  iConfiguration - index of string */
   0x80,                       /* 7  bmAttributes - Bus powered */
   0xC8,                       /* 8  bMaxPower - 400mA */
+
+  //Interface Association Descriptor1
+  0x08,                         //bLength
+  USB_IAD,                      //  bDescriptorType
+  CDC_NOTIFICATION_INTERFACE1,  // BYTE  bFirstInterface
+  0x02,                         //bInterfaceCount
+  USB_CLASS_COMMUNICATIONS,     // bFunctionClass
+  USB_CDC_ACM_SUBCLASS,         // bFunctionSubClass
+  USB_CDC_AT_COMMAND_PROTOCOL,   //bFunctionProtocol
+  0x00,                           // Interface string index
 
   /* CDC Communication interface */
   0x09,                       /* 0  bLength */
   USB_DESCTYPE_INTERFACE,     /* 1  bDescriptorType - Interface */
-  0x00,                       /* 2  bInterfaceNumber - Interface 0 */
+  CDC_NOTIFICATION_INTERFACE1,/* 2  bInterfaceNumber - Interface 0 */
   0x00,                       /* 3  bAlternateSetting */
   0x01,                       /* 4  bNumEndpoints */
   USB_CLASS_COMMUNICATIONS,   /* 5  bInterfaceClass */
@@ -95,8 +106,8 @@ static unsigned char cfgDesc[] = {
   0x05,                     /* 0  bLength */
   USB_DESCTYPE_CS_INTERFACE,/* 1  bDescriptortype, CS_INTERFACE */
   0x06,                     /* 2  bDescriptorsubtype, UNION */
-  0x00,                     /* 3  bControlInterface - Interface 0 */
-  0x01,                     /* 4  bSubordinateInterface0 - Interface 1 */
+  CDC_NOTIFICATION_INTERFACE1,/* 3  bControlInterface - Interface 0 */
+  CDC_DATA_INTERFACE1,        /* 4  bSubordinateInterface0 - Interface 1 */
 
   /* Call Management Functional descriptor */
   0x05,                     /* 0  bLength */
@@ -108,16 +119,17 @@ static unsigned char cfgDesc[] = {
   /* Notification Endpoint descriptor */
   0x07,                         /* 0  bLength */
   USB_DESCTYPE_ENDPOINT,        /* 1  bDescriptorType */
-  (CDC_NOTIFICATION_EP_NUM | 0x80),/* 2  bEndpointAddress */
+  (CDC_NOTIFICATION_EP_NUM1 | 0x80),/* 2  bEndpointAddress */
   0x03,                         /* 3  bmAttributes */
   0x40,                         /* 4  wMaxPacketSize - Low */
   0x00,                         /* 5  wMaxPacketSize - High */
   0xFF,                         /* 6  bInterval */
 
+
   /* CDC Data interface */
   0x09,                     /* 0  bLength */
   USB_DESCTYPE_INTERFACE,   /* 1  bDescriptorType */
-  0x01,                     /* 2  bInterfacecNumber */
+  CDC_DATA_INTERFACE1,      /* 2  bInterfacecNumber */
   0x00,                     /* 3  bAlternateSetting */
   0x02,                     /* 4  bNumEndpoints */
   USB_CLASS_CDC_DATA,       /* 5  bInterfaceClass */
@@ -128,7 +140,7 @@ static unsigned char cfgDesc[] = {
   /* Data OUT Endpoint descriptor */
   0x07,                     /* 0  bLength */
   USB_DESCTYPE_ENDPOINT,    /* 1  bDescriptorType */
-  CDC_DATA_RX_EP_NUM,       /* 2  bEndpointAddress */
+  CDC_DATA_RX_EP_NUM1,       /* 2  bEndpointAddress */
   0x02,                     /* 3  bmAttributes */
   0x00,                     /* 4  wMaxPacketSize - Low */
   0x02,                     /* 5  wMaxPacketSize - High */
@@ -137,11 +149,96 @@ static unsigned char cfgDesc[] = {
   /* Data IN Endpoint descriptor */
   0x07,                     /* 0  bLength */
   USB_DESCTYPE_ENDPOINT,    /* 1  bDescriptorType */
-  (CDC_DATA_TX_EP_NUM | 0x80),/* 2  bEndpointAddress */
+  (CDC_DATA_TX_EP_NUM1 | 0x80),/* 2  bEndpointAddress */
   0x02,                     /* 3  bmAttributes */
   0x00,                     /* 4  wMaxPacketSize - Low byte */
   0x02,                     /* 5  wMaxPacketSize - High byte */
-  0x01                      /* 6  bInterval */
+  0x01,                      /* 6  bInterval */
+
+  //Interface Association Descriptor2
+  0x08,                         //bLength
+  USB_IAD,                      //  bDescriptorType
+  CDC_NOTIFICATION_INTERFACE2,  // BYTE  bFirstInterface
+  0x02,                         //bInterfaceCount
+  USB_CLASS_COMMUNICATIONS,     // bFunctionClass
+  USB_CDC_ACM_SUBCLASS,         // bFunctionSubClass
+  USB_CDC_AT_COMMAND_PROTOCOL,   //bFunctionProtocol
+  0x00,                           // Interface string index
+
+  /* CDC Communication interface */
+   0x09,                       /* 0  bLength */
+   USB_DESCTYPE_INTERFACE,     /* 1  bDescriptorType - Interface */
+   CDC_NOTIFICATION_INTERFACE2,/* 2  bInterfaceNumber - Interface 0 */
+   0x00,                       /* 3  bAlternateSetting */
+   0x01,                       /* 4  bNumEndpoints */
+   USB_CLASS_COMMUNICATIONS,   /* 5  bInterfaceClass */
+   USB_CDC_ACM_SUBCLASS,       /* 6  bInterfaceSubClass - Abstract Control Model */
+   USB_CDC_AT_COMMAND_PROTOCOL,/* 7  bInterfaceProtocol - AT Command V.250 protocol */
+   0x00,                       /* 8  iInterface - No string descriptor */
+
+   /* Header Functional descriptor */
+   0x05,                      /* 0  bLength */
+   USB_DESCTYPE_CS_INTERFACE, /* 1  bDescriptortype, CS_INTERFACE */
+   0x00,                      /* 2  bDescriptorsubtype, HEADER */
+   0x10, 0x01,                /* 3  bcdCDC */
+
+   /* ACM Functional descriptor */
+   0x04,                      /* 0  bLength */
+   USB_DESCTYPE_CS_INTERFACE, /* 1  bDescriptortype, CS_INTERFACE */
+   0x02,                      /* 2  bDescriptorsubtype, ABSTRACT CONTROL MANAGEMENT */
+   0x02,                      /* 3  bmCapabilities: Supports subset of ACM commands */
+
+   /* Union Functional descriptor */
+   0x05,                     /* 0  bLength */
+   USB_DESCTYPE_CS_INTERFACE,/* 1  bDescriptortype, CS_INTERFACE */
+   0x06,                     /* 2  bDescriptorsubtype, UNION */
+   CDC_NOTIFICATION_INTERFACE2,/* 3  bControlInterface - Interface 2 */
+   CDC_DATA_INTERFACE2,        /* 4  bSubordinateInterface0 - Interface 3 */
+
+   /* Call Management Functional descriptor */
+   0x05,                     /* 0  bLength */
+   USB_DESCTYPE_CS_INTERFACE,/* 1  bDescriptortype, CS_INTERFACE */
+   0x01,                     /* 2  bDescriptorsubtype, CALL MANAGEMENT */
+   0x03,                     /* 3  bmCapabilities, DIY */
+   0x03,                     /* 4  bDataInterface */
+
+   /* Notification Endpoint descriptor */
+   0x07,                         /* 0  bLength */
+   USB_DESCTYPE_ENDPOINT,        /* 1  bDescriptorType */
+   (CDC_NOTIFICATION_EP_NUM2 | 0x80),/* 2  bEndpointAddress */
+   0x03,                         /* 3  bmAttributes */
+   0x40,                         /* 4  wMaxPacketSize - Low */
+   0x00,                         /* 5  wMaxPacketSize - High */
+   0xFF,                         /* 6  bInterval */
+
+   /* CDC Data interface */
+   0x09,                     /* 0  bLength */
+   USB_DESCTYPE_INTERFACE,   /* 1  bDescriptorType */
+   CDC_DATA_INTERFACE2,      /* 2  bInterfacecNumber */
+   0x00,                     /* 3  bAlternateSetting */
+   0x02,                     /* 4  bNumEndpoints */
+   USB_CLASS_CDC_DATA,       /* 5  bInterfaceClass */
+   0x00,                     /* 6  bInterfaceSubClass */
+   0x00,                     /* 7  bInterfaceProtocol*/
+   0x00,                     /* 8  iInterface - No string descriptor*/
+
+   /* Data OUT Endpoint descriptor */
+   0x07,                     /* 0  bLength */
+   USB_DESCTYPE_ENDPOINT,    /* 1  bDescriptorType */
+   CDC_DATA_RX_EP_NUM2,       /* 2  bEndpointAddress */
+   0x02,                     /* 3  bmAttributes */
+   0x00,                     /* 4  wMaxPacketSize - Low */
+   0x02,                     /* 5  wMaxPacketSize - High */
+   0x00,                     /* 6  bInterval */
+
+   /* Data IN Endpoint descriptor */
+   0x07,                     /* 0  bLength */
+   USB_DESCTYPE_ENDPOINT,    /* 1  bDescriptorType */
+   (CDC_DATA_TX_EP_NUM2 | 0x80),/* 2  bEndpointAddress */
+   0x02,                     /* 3  bmAttributes */
+   0x00,                     /* 4  wMaxPacketSize - Low byte */
+   0x02,                     /* 5  wMaxPacketSize - High byte */
+   0x01                      /* 6  bInterval */
 };
 
 unsafe{
@@ -149,9 +246,9 @@ unsafe{
   static char * unsafe stringDescriptors[]=
   {
     "\x09\x04",             /* Language ID string (US English) */
-    "XMOS",                 /* iManufacturer */
-    "CDC Virtual COM Port", /* iProduct */
-    "0123456789"            /* iSerialNumber */
+    "Caretaker Medical",                 /* iManufacturer */
+    "Pulse Simulator", /* iProduct */
+    "0000000000"            /* iSerialNumber */
     "Config",               /* iConfiguration string */
   };
 }
@@ -290,9 +387,9 @@ void Endpoint0(chanend chan_ep0_out, chanend chan_ep0_in)
                  */
                 case USB_BMREQ_H2D_CLASS_INT:
                 case USB_BMREQ_D2H_CLASS_INT:
-
                     /* Inspect for CDC Communications Class interface num */
-                    if(sp.wIndex == 0)
+
+                    if((sp.wIndex == CDC_NOTIFICATION_INTERFACE1) || (sp.wIndex == CDC_NOTIFICATION_INTERFACE2))
                     {
                         /* Returns  XUD_RES_OKAY if handled,
                          *          XUD_RES_ERR if not handled,
@@ -329,8 +426,8 @@ void Endpoint0(chanend chan_ep0_out, chanend chan_ep0_in)
 void CdcEndpointsHandler(chanend c_epint_in, chanend c_epbulk_out, chanend c_epbulk_in,
                          SERVER_INTERFACE(usb_cdc_interface, cdc))
 {
-    static unsigned char txBuf[2][MAX_EP_SIZE];
-    static unsigned char rxBuf[2][MAX_EP_SIZE];
+    /*static*/ unsigned char txBuf[2][MAX_EP_SIZE];
+    /*static*/ unsigned char rxBuf[2][MAX_EP_SIZE];
     int readBufId = 0, writeBufId = 0;          // used to identify buffer read/write by device
     int rxLen[2] = {0, 0}, txLen = 0;
     int readIndex = 0;
@@ -376,6 +473,7 @@ void CdcEndpointsHandler(chanend c_epint_in, chanend c_epbulk_out, chanend c_epb
                     * Say that another buffer is also waiting to be read */
                    readWaiting = 1;
                }
+               cdc.data_ready();
            } else {
                XUD_SetReady_Out(epbulk_out, rxBuf[!readBufId]);
            }

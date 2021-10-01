@@ -8,23 +8,36 @@
 
 #define DEBUG 0
 
+// USB interface and channel declaration.
+//Channel ends must match the interfaces in the USB Configuration Descriptor
+#define CDC_NOTIFICATION_INTERFACE1  0
+#define CDC_NOTIFICATION_EP_NUM1     1
 
-interface stepper_interface {
-    void set_state(int state);
-};
+#define CDC_DATA_INTERFACE1          1
+#define CDC_DATA_RX_EP_NUM1          1
+#define CDC_DATA_TX_EP_NUM1          2
 
+#define CDC_NOTIFICATION_INTERFACE2  2
+#define CDC_NOTIFICATION_EP_NUM2     3
 
+#define CDC_DATA_INTERFACE2          3
+#define CDC_DATA_RX_EP_NUM2          2
+#define CDC_DATA_TX_EP_NUM2          4
 
 
 interface usb_cdc_interface {
 
+
+
     [[guarded]] void put_char(char byte);
 
-    [[guarded]] char get_char(void);
+    [[clears_notification]] [[guarded]] char get_char(void);
 
     [[guarded]] int write(unsigned char data[], REFERENCE_PARAM(unsigned, length));
 
-    [[guarded]] int read(unsigned char data[], REFERENCE_PARAM(unsigned, count));
+    [[clears_notification]] [[guarded]] int read(unsigned char data[], REFERENCE_PARAM(unsigned, count));
+
+    [[notification]] slave void data_ready( void );
 
     int available_bytes(void);
 

@@ -57,6 +57,7 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 	int rrhr, rrbp;
 	int state = WF_IDLE;
 	int playing = 0;
+	int go_home = 0;
 	int load_i = 0;
 	int pb_i = 1;
 
@@ -105,6 +106,14 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 				        }
 					}
 				}// ends if
+				else {
+				    if (go_home) {
+				        c_pos_req_wf <: MIN_STRIDE_TIME; // Speed
+				        c_pos_req_wf <: home[pb_i]; // Position
+				        c_pos_req_wf <: -1; // We indicate this is the last point by using a negative number
+				        go_home = 0;
+				    }
+				}
 				break;
 			}
 			case c_wf_mode :> tstate : {
@@ -113,10 +122,9 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 				if (tstate == WF_IDLE) {
 					state = tstate;
 					if (playing) {
-						c_pos_req_wf <: MIN_STRIDE_TIME; // Speed
-						c_pos_req_wf <: home[pb_i]; // Position
-						c_pos_req_wf <: 0; // Settling time
+
 						playing = 0;
+						go_home = 1;
 					} // ends if playing
 				} // ends if
 				else {

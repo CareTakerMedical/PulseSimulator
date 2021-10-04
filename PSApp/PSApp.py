@@ -154,6 +154,8 @@ class PSAppMainWindow(QMainWindow):
         # and the hardware (i.e., XMOS)
         self.ps_state = PSAppState()
         self.timestamp = None
+        self.calibration_attempts = 0
+        self.max_calibration_attempts = 3
 
         # Create central widget
         cwidget = QWidget()
@@ -176,7 +178,7 @@ class PSAppMainWindow(QMainWindow):
         self.read_pressure_button.clicked.connect(self._start_read_pressure)
         self.read_pressure_button.setToolTip("Click this button to bring up a dialog allowing you to read the output of the pressure sensor.")
         self.run_cal_button = QPushButton("Run Calibration")
-        self.run_cal_button.clicked.connect(self._start_cal_procedure)
+        self.run_cal_button.clicked.connect(self._first_cal_procedure)
         self.run_cal_button.setToolTip("Click this button to run a calibration procedure; the calibration procedure must be performed before a simulation is executed.")
 
         # Place the elements within the frame.
@@ -517,16 +519,61 @@ class PSAppMainWindow(QMainWindow):
                         self.play_button ]:
             button.setEnabled(False)
 
+    def _first_cal_procedure(self):
+        self.wf_status.setText("Status: Running calibration procedure.")
+        self._start_cal_procedure()
+
     def _end_cal_procedure(self):
         """ Once we're finished, change statuses and store the calibration values away.
         """
-        self.ps_state.populate_pressure_table(x=self.plot_x,y=self.plot_y)
-        self.ps_state.set_state("calibrated",True)
-        self.wf_status.setText("Status: Idle")
-        QApplication.processEvents()
-        self.cal_thread.quit()
-        self.cal_thread.wait()
-        self._set_widget_status()
+        # Before we go populating the pressure table, we probably ought to make sure that
+        # the numbers that were reported make sense.  As I've thought about this, I think
+        # the only check that really needs to be performed as that the pressure always
+        # goes up as the motor progresses.  If a number is reported that is wildly too
+        # high, then the next datapoint, assuming it was a one-off data error, will fall
+        # back on the (roughly) straight line, and subtracting the previous point from the
+        # 'next' point will result in a negative number, meaning that we have an error.
+        # Essentially the same thing is true if we have a pressure reading of '0' or
+        # something else that is erroneously low; subtracting the 'correct' previous
+        # value from the incorrect current value will result in a negative result.
+        # Therefore, once the error is detected, we can just try the process again.
+        # I'll put a message in the 'status' text box and then re-start the process.
+        if (self._eval_cal_results):
+            self.calibration_attempts = 0
+            self.ps_state.populate_pressure_table(x=self.plot_x,y=self.plot_y)
+            self.ps_state.set_state("calibrated",True)
+            self.wf_status.setText("Status: Idle")
+            QApplication.processEvents()
+            self.cal_thread.quit()
+            self.cal_thread.wait()
+            self._set_widget_status()
+        else:
+            # There was an error.  Wait for the original cal thread to terminate, and then
+            # restart it.
+            self.calibration_attempts += 1
+            if (self.calibration_attempts < self.max_calibration_attempts):
+                self.wf_status.setText("Status: Calibration procedure failed, trying again, attempt number {}".format(self.calibration_attempts + 1))
+                QApplication.processEvents()
+                self.cal_thread.quit()
+                self.cal_thread.wait()
+                self.cal_worker = None
+                self.cal_thread = None
+                self._start_cal_procedure()
+            else:
+                self.calibration_attempts = 0
+                self.wf_status.setText("Status: Calibration procedure failed.")
+                # Pop up a warning window saying we failed 
+                warn_dlg = QMessageBox()
+                warn_dlg.setText("Could not perform calibration successfully after {} attempts.  Please check all pneumatic hoses and connections for issues.".format(self.max_calibration_attempts))
+                warn_dlg.exec()
+
+    def _eval_cal_results(self):
+        """ Check to make sure the points make sense.
+        """
+        for i in range(1,len(self.plot_y)):
+            if ((self.plot_y[i] - self.plot_y[(i - 1)]) <= 0):
+                return False
+        return True
 
     def _eval_param_entry(self,le):
         """ For the particular LineEdit that changed, see that the value makes sense.
@@ -738,8 +785,10 @@ class PSAppMainWindow(QMainWindow):
         """ Callback for when the 'Send Home' button is clicked.
         """
         self._disable_buttons()
+        self._clear_plot()
         new_pos = self.home_pos_le.text()
         self.wf_status.setText("Status: Sending home to position {}".format(new_pos))
+        # If there's data in the plot window, we'll want to clear that out
         QApplication.processEvents()
         success = False
         try:
@@ -754,8 +803,10 @@ class PSAppMainWindow(QMainWindow):
         if success:
             # Clean out the data interface
             xyz = self.data_iface["ser"].readline()
-            print("Got here, success, xyz = {}".format(xyz))
         self.ps_state.set_state("home",success)
+        # Performing this action will undo any priming/calibrating, so set those variables accordingly
+        self.ps_state.set_state("primed",False)
+        self.ps_state.set_state("calibrated",False)
         self.wf_status.setText("Status: Idle")
         self._set_widget_status()
 
@@ -822,7 +873,6 @@ class PSAppMainWindow(QMainWindow):
         self.cal_worker.new_reading.connect(self._update_calibration_plot)
         self.cal_worker.reading_error.connect(self._terminate_cal_with_error)
         self.cal_worker.finished.connect(self._end_cal_procedure)
-        self.wf_status.setText("Status: Running calibration procedure.")
         self.plot_x = []
         self.plot_y = []
         self.plt.setXRange(xmin,xmax)

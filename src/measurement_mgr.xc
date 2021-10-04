@@ -209,7 +209,7 @@ void measurement_mgr(client interface i2c_master_if i2c, chanend c_mode, chanend
 					c_mm_ready <: 1;
 				}
 				if (new_reading > 0) {
-					c_press_data <: pos;
+					c_press_data <: (settling_time < 0) ? (-1 * pos) : pos;
 					c_press_data <: take_measurement(i2c);//,c_measurement_mgr_debug);
 					new_reading = 0;
 				}

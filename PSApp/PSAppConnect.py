@@ -121,6 +121,8 @@ class PSAppConnectionManager(QDialog):
         self.data_iface_signal.emit(self.data_iface)
 
     def _launch_thread(self):
+        """ Launch the thread and check for presence.
+        """
         self.quit_button.setEnabled(False)
         self.thread = QThread()
         self.worker = PSAppFindInterfaces()

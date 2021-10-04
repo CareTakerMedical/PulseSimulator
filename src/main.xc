@@ -2,7 +2,7 @@
 
 #include <platform.h>
 #include <xs1.h>
-#include "uart.h"
+//#include "uart.h"
 #include "usb.h"
 #include "i2c.h"
 #include "xud_cdc.h"
@@ -28,6 +28,7 @@ void chip_reset()
 {
     int button_val;
     timer tmr;
+    unsigned int t;
     unsigned int tileId;
     unsigned int pllVal;
     unsigned int tileArrayLength;
@@ -39,7 +40,8 @@ void chip_reset()
         p_button :> button_val;
         if ((button_val & 0x1) == 0) {
             // Debounce
-            tmr when timerafter(10000000) :> void;
+            tmr :> t;
+            tmr when timerafter(t + 10000000) :> void;
             // Wait for the button to come back up
             p_button :> button_val;
             if ((button_val & 0x1) == 0) {

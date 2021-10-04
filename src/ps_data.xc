@@ -101,6 +101,8 @@ void ps_data(client interface usb_cdc_interface cdc, chanend c_data_mode, chanen
 				            timer_on = 1;
 				            tmr :> t;
 				        }
+				        if (pos < 0)
+				            c_data_status <: 0;
 				    }
 				    else {
 				        // These other modes inform 'ps_config' when new data has been

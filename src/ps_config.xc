@@ -132,13 +132,16 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 			    else if (data_status < 0)
 			        length = sprintf(pbuf,"ERR: Pressure sensor status error.\n");
 			    else {
-			        if (pb_stop)
+			        if (pb_stop) {
 			            pb_stop = 0;
+			            length = 0;
+			        }
 			        else
 			            length = sprintf(pbuf,"OK: Data ready\n");
 			    }
 			    busy = 0;
-			    cdc.write(pbuf,length);
+			    if (length > 0)
+			        cdc.write(pbuf,length);
 			    break;
 			}
 			case (request_length > 0) => c_wf_mode :> wf_length : {
@@ -216,7 +219,6 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 						// Signal to wf_calc that a new waveform is to be loaded
 						else if (pbuf[0] == 'W') {
 							if (handshake_cmd(cdc,'W') > 0) {
-							    pb_stop = 1;
 								c_wf_mode <: WF_LOAD;
 							}
 							//else
@@ -276,6 +278,7 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 						// Stop playback
 						else if (pbuf[0] == 'S') {
 							if (handshake_cmd(cdc,'S') > 0) {
+							    pb_stop = 1;
 							    c_wf_mode <: WF_IDLE;
 								//c_data_mode <: MODE_IDLE;
 								//c_mode <: MODE_IDLE;

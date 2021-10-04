@@ -54,19 +54,22 @@ class PSAppReadPressureDialog(QDialog):
     """ Dialog that pops up when we're either just reading the output of the pressure sensor, or priming the system.
     """
     comm_issue = pyqtSignal()
-    def __init__(self,comm_interface,data_iface):
+    def __init__(self,comm_interface,data_iface,pmin,pmax):
         """ Initialization function; provide a serial device to read from/write to
         """
         super(PSAppReadPressureDialog,self).__init__()
+        self.pmin = pmin
+        self.pmax = pmax
         
         # They'll be two buttons:  'Prime' and 'Cancel'.  'Prime' will emit 'accepted' and 'Cancel'
         # will emit 'rejected'.
-        prime_button = QPushButton("Prime")
-        prime_button.clicked.connect(self._prime_button_clicked)
+        self.prime_button = QPushButton("Prime")
+        self.prime_button.clicked.connect(self._prime_button_clicked)
+        self.prime_button.setEnabled(False)
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(self._cancel_button_clicked)
         button_layout = QHBoxLayout()
-        button_layout.addWidget(prime_button)
+        button_layout.addWidget(self.prime_button)
         button_layout.addWidget(cancel_button)
         button_widget = QWidget()
         button_widget.setLayout(button_layout)
@@ -107,16 +110,27 @@ class PSAppReadPressureDialog(QDialog):
         while "ERR" in self.press_readings:
             self.press_readings.remove("ERR")
         if (len(self.press_readings) >= 2):
-            self.current_pressure.setText("{:.1f}".format((sum(self.press_readings)/len(self.press_readings))))
+            press_display = sum(self.press_readings) / len(self.press_readings)
+            self.current_pressure.setText("{:.1f}".format(press_display))
+            if ((press_display < self.pmin) or (press_display > self.pmax)):
+                self.prime_button.setEnabled(False)
+                if (press_display < self.pmin):
+                    self.current_pressure.setStyleSheet("font: 24pt; color: blue; font-weight: italic")
+                else:
+                    self.current_pressure.setStyleSheet("font: 24pt; color: red; font-weight: italic")
+            else:
+                self.current_pressure.setStyleSheet("font: 24pt; font-weight: normal")
+                self.prime_button.setEnabled(True)
         else:
             self.current_pressure.setText("ERR")
+            self.prime_button.setEnabled(False)
         QApplication.processEvents()
         self.press_readings = list()
 
     def _cancel_button_clicked(self):
         """ Stop the thread before exiting.
         """
-        self.current_pressure.setStyleSheet("font: 12pt;")
+        self.current_pressure.setStyleSheet("font: 12pt; font-weight: normal")
         self.current_pressure.setText("Priming canceled! Closing...")
         QApplication.processEvents()
         try:

@@ -122,7 +122,6 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 				if (tstate == WF_IDLE) {
 					state = tstate;
 					if (playing) {
-
 						playing = 0;
 						go_home = 1;
 					} // ends if playing

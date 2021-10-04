@@ -201,7 +201,7 @@ class PSAppMainWindow(QMainWindow):
         self.systolic_le = StateAssociatedLineEdit(self.ps_state,"systolic")
         self.systolic_le.textChanged.connect(lambda x: self._eval_param_entry(self.systolic_le))
         self.diastolic_le = StateAssociatedLineEdit(self.ps_state,"diastolic")
-        self.diastolic_le.textChanged.connect(lambda x: self.eval_param_entry(self.diastolic_le))
+        self.diastolic_le.textChanged.connect(lambda x: self._eval_param_entry(self.diastolic_le))
         self.heart_rate_le = StateAssociatedLineEdit(self.ps_state,"heart_rate")
         self.heart_rate_le.textChanged.connect(lambda x: self._eval_param_entry(self.heart_rate_le))
         self.respiration_rate_le = StateAssociatedLineEdit(self.ps_state,"respiration_rate")
@@ -334,6 +334,25 @@ class PSAppMainWindow(QMainWindow):
         ci_widget = QWidget()
         ci_widget.setLayout(cal_inc_layout)
         #
+        # 'Primed' region
+        prime_min_label = QLabel("Prime Minimum:")
+        prime_min_label.setToolTip("If the 'primed' pressure region is below this number, say that priming is invalid.")
+        self.prime_min_le = RangeIntLineEdit(50,minimum=25,maximum=75)
+        self.prime_min_le.illegal_value.connect(lambda: self.twidget.setTabEnabled(0,False))
+        self.prime_min_le.legal_value.connect(self._check_config_tab)
+        prime_max_label = QLabel("Prime Maximum:")
+        prime_max_label.setToolTip("If the 'primed' pressure region is above this number, say that priming is invalid.")
+        self.prime_max_le = RangeIntLineEdit(60,minimum=25,maximum=75)
+        self.prime_max_le.illegal_value.connect(lambda: self.twidget.setTabEnabled(0,False))
+        self.prime_max_le.legal_value.connect(self._check_config_tab)
+        prime_layout = QHBoxLayout()
+        prime_layout.addWidget(prime_min_label)
+        prime_layout.addWidget(self.prime_min_le)
+        prime_layout.addWidget(prime_max_label)
+        prime_layout.addWidget(self.prime_max_le)
+        prime_widget = QWidget()
+        prime_widget.setLayout(prime_layout)
+        #
         # Pulse Table Data File
         pt_label = QLabel("Pulse Table File:")
         self.pt_le = FileOpenLineEdit(get_default_pulse_table_path())
@@ -372,6 +391,7 @@ class PSAppMainWindow(QMainWindow):
         cfg_layout.addWidget(hp_widget)
         cfg_layout.addWidget(cm_widget)
         cfg_layout.addWidget(ci_widget)
+        cfg_layout.addWidget(prime_widget)
         cfg_layout.addWidget(pt_widget)
         cfg_layout.addWidget(wf_widget)
         cfg_layout.addWidget(defaults_button)
@@ -474,10 +494,14 @@ class PSAppMainWindow(QMainWindow):
     def _check_config_tab(self):
         """ Go through the line edits and check that they all have valid states.  Also, check that the files supplied exist.
         """
-        for x in [self.home_pos_le,self.cal_max_le,self.cal_inc_le,self.pt_le,self.wf_le]:
+        for x in [self.home_pos_le,self.cal_max_le,self.cal_inc_le,self.pt_le,self.wf_le,self.prime_min_le,self.prime_max_le]:
             if not(x.get_valid()):
                 self.twidget.setTabEnabled(0,False)
                 return
+        # Furthermore, 'prime_min' must be less than 'prime_max'
+        if not(int(self.prime_min_le.text()) < int(self.prime_max_le.text())):
+            self.twidget.setTabEnabled(0,False)
+            return
         self.twidget.setTabEnabled(0,True)
 
     def _clear_plot(self):
@@ -500,6 +524,8 @@ class PSAppMainWindow(QMainWindow):
 
     def _data_load_complete(self):
         self.pulse_loading_mb.close()
+        self.wf_status.setText("Status:  Playback of pulse table.")
+        QApplication.processEvents()
 
     def _data_read_fail_alert(self):
         """ Probably a timeout from the data readback procedure.
@@ -518,10 +544,6 @@ class PSAppMainWindow(QMainWindow):
                         self.refresh_button,
                         self.play_button ]:
             button.setEnabled(False)
-
-    def _first_cal_procedure(self):
-        self.wf_status.setText("Status: Running calibration procedure.")
-        self._start_cal_procedure()
 
     def _end_cal_procedure(self):
         """ Once we're finished, change statuses and store the calibration values away.
@@ -622,6 +644,8 @@ class PSAppMainWindow(QMainWindow):
             self.ps_state.set_state("playing",False)
             if (self.ps_state.get_state("play_mode") == PlayMode.PULSE_TABLE):
                 self.pulse_worker.stop_playback()
+                self.wf_status.setText("Status:  Idle")
+                QApplication.processEvents()
             else:
                 pass
                 #self.wf_worker.stop_playback()
@@ -654,6 +678,8 @@ class PSAppMainWindow(QMainWindow):
                 # Right before we start, throw up a message box that blocks the user from playing
                 # with the GUI, since it can take quite a while to load all of the points into
                 # the memory on the firmware.
+                self.wf_status.setText("Status:  Loading point into memory.")
+                QApplication.processEvents()
                 self.pulse_loading_mb = QMessageBox()
                 self.pulse_loading_mb.setText("Loading the points into memory.  Please be patient...")
                 self.pulse_loading_mb.setWindowModality(Qt.WindowModal)
@@ -671,9 +697,19 @@ class PSAppMainWindow(QMainWindow):
         """
         self.ps_state.set_state("systolic",float(self.systolic_le.text()))
         self.ps_state.set_state("diastolic",float(self.diastolic_le.text()))
-        self.ps_state.set_state("heart rate",float(self.heart_rate_le.text()))
-        self.ps_state.set_state("respiration rate",float(self.respiration_rate_le.text()))
+        self.ps_state.set_state("heart_rate",float(self.heart_rate_le.text()))
+        self.ps_state.set_state("respiration_rate",float(self.respiration_rate_le.text()))
+        # Now go through each of the line edits and 'correct the record', as it were...
+        for le in [self.systolic_le,self.diastolic_le,self.heart_rate_le,self.respiration_rate_le]:
+            self._eval_param_entry(le)
         self.refresh_button.setEnabled(False)
+        self._set_widget_status()
+
+    def _first_cal_procedure(self):
+        """ Change the status text appropriately, and then start the calibration procedure.
+        """
+        self.wf_status.setText("Status: Running calibration procedure.")
+        self._start_cal_procedure()
 
     def _hardware_disconnect_event(self):
         """ We sense that the COM device that we're supposed to use has gone away.
@@ -884,10 +920,12 @@ class PSAppMainWindow(QMainWindow):
     def _start_read_pressure(self):
         """ Bring up a dialog that reads the current pressure every 200ms.
         """
+        self._clear_plot()
         self.wf_status.setText("Status: Reading pressure values")
         QApplication.processEvents()
+        self._set_primed(False)
         self._disable_buttons()
-        self.rp_dlg = PSAppReadPressureDialog(self.comm_interface,self.data_iface)
+        self.rp_dlg = PSAppReadPressureDialog(self.comm_interface,self.data_iface,int(self.prime_min_le.text()),int(self.prime_max_le.text()))
         self.rp_dlg.comm_issue.connect(self._rp_comm_issue)
         self.rp_dlg.accepted.connect(lambda: self._set_primed(True))
         self.rp_dlg.rejected.connect(lambda: self._set_primed(False))

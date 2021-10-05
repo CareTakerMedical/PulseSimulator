@@ -41,7 +41,7 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 	int heart_rate[2];
 	int resp_rate[2];
 	int calmax[2];
-	int home[2];
+	int home = 0;
 	int wf_pts[2][1024];
 	int wf_size[2] = {0,0};
 	int tstate, twf_pt, tcfg;
@@ -109,7 +109,7 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 				else {
 				    if (go_home) {
 				        c_pos_req_wf <: MIN_STRIDE_TIME; // Speed
-				        c_pos_req_wf <: home[pb_i]; // Position
+				        c_pos_req_wf <: home; // Position
 				        c_pos_req_wf <: -1; // We indicate this is the last point by using a negative number
 				        go_home = 0;
 				    }
@@ -124,10 +124,6 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 					if (playing) {
 						playing = 0;
 						go_home = 1;
-						printstr("Got here, home[pb_i] = ");
-						printint(home[pb_i]);
-						printstr(", home[load_i] = ");
-						printintln(home[load_i]);
 					} // ends if playing
 				} // ends if
 				else {
@@ -151,6 +147,10 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 					            c_wf_mode <: wf_size[load_i];
 					            pb_i = load_i;
 					            load_i = (load_i > 0) ? 0 : 1;
+					            printstr("Check pb_i and load_i; pb_i = ");
+					            printint(pb_i);
+					            printstr(", load_i = ");
+					            printintln(load_i);
 					            // This is also where we'll do some initialization
 					            // before diving in to the playback portion.
 					            {mean,range} = calculate_mean_and_range(wf_pts[pb_i],wf_size[pb_i]);
@@ -199,7 +199,7 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 				// Determine which parameter has come in based on the LSNibble.
 				switch (tcfg & 0x0F) {
 					case HOME_ID:
-						home[load_i] = tcfg >> 4;
+						home = tcfg >> 4;
 						break;
 					case HR_ID:
 						heart_rate[load_i] = tcfg >> 4;

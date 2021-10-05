@@ -109,7 +109,7 @@ int handshake_cmd(client interface usb_cdc_interface cdc, char cmd)
 	return ret;
 }
 
-void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c_pos_req_cfg, chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend c_data_mode, chanend c_data_status)//, chanend c_ps_config_debug)
+void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c_pos_req_cfg, chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend c_data_mode, chanend c_data_status, chanend c_mm_fault)
 {
 	int busy = 0;
 	int data_status = 0;
@@ -118,12 +118,21 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 	int thome = 0;
 	int tinc = 0;
 	int pb_stop = 0;
+	int mm_step_count = 0;
 	int request_length = 0;
 	unsigned int length;
 	char pbuf[128];
 
 	while(1){
 		select{
+		    case c_mm_fault :> mm_step_count : {
+		        busy = 0;
+		        c_mode <: MODE_IDLE;
+		        c_data_mode <: MODE_IDLE;
+		        length = sprintf(pbuf,"ERR: Maximum step count!\n");
+		        cdc.write(pbuf,length);
+		        break;
+		    }
 			case c_data_status :> data_status : {
 			    c_mode <: MODE_IDLE;
 			    c_data_mode <: MODE_IDLE;
@@ -280,8 +289,6 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 							if (handshake_cmd(cdc,'S') > 0) {
 							    pb_stop = 1;
 							    c_wf_mode <: WF_IDLE;
-								//c_data_mode <: MODE_IDLE;
-								//c_mode <: MODE_IDLE;
 							}
 						}	
 						else if (pbuf[0] == 'O') {

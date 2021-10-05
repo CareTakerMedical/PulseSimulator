@@ -112,4 +112,7 @@
 // Read attempts
 #define MAX_READ_ATTEMPTS   16
 
+// No motor power detector limit
+#define MAX_STEP_COUNT  50000
+
 #endif

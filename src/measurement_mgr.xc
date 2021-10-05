@@ -120,7 +120,7 @@ int take_measurement(client interface i2c_master_if i2c)//, chanend c_measuremen
 	return (0xFF << 24);
 }
 
-void measurement_mgr(client interface i2c_master_if i2c, chanend c_mode, chanend c_pos_req_cfg, chanend c_pos_req_wf, chanend c_press_data, chanend c_mm_ready)// chanend c_measurement_mgr_debug)
+void measurement_mgr(client interface i2c_master_if i2c, chanend c_mode, chanend c_pos_req_cfg, chanend c_pos_req_wf, chanend c_press_data, chanend c_mm_ready, chanend c_mm_fault)
 {
 	// Mode-related variables
 	int mode = MODE_IDLE;
@@ -128,6 +128,7 @@ void measurement_mgr(client interface i2c_master_if i2c, chanend c_mode, chanend
 	int pos_req = 0;
 	int pos = 0;
 	int speed = 0;
+	int count = 0;
 
 	// Stepper-related variables
 	int hazard = 0;
@@ -139,13 +140,6 @@ void measurement_mgr(client interface i2c_master_if i2c, chanend c_mode, chanend
 	timer tmr;
 	int new_reading = 0;
 
-	// Initialize the pressure sensor; if using the breakout, this does nothing...
-	/*
-	p_reset <: 0;
-	delay_ticks(500000);
-	p_reset <: 1;
-	delay_ticks(500000);
-	*/
 	p_ps_ctrl <: 0;
 
 
@@ -170,7 +164,23 @@ void measurement_mgr(client interface i2c_master_if i2c, chanend c_mode, chanend
 				c_pos_req_cfg :> settling_time;
 				// Based on the mode, calculate where to go to next; if 
 				switch (mode) {
-					case MODE_SET_HOME: { while (!step(STEP_NEAR,MIN_STRIDE_TIME)); pos = 0; new_pos = pos_req; break; }
+					case MODE_SET_HOME: {
+					    count = 0;
+					    while (count < MAX_STEP_COUNT) {
+					        if (step(STEP_NEAR,MIN_STRIDE_TIME))
+					            break;
+					        count++;
+					    }
+					    if (count < MAX_STEP_COUNT) {
+					        pos = 0;
+					        new_pos = pos_req;
+					    }
+					    else {
+					        // We never made it to the home limit, so there's a problem...
+					        c_mm_fault <: count;
+					    }
+					    break;
+					}
 					case MODE_GO_HOME: { new_pos = pos_req; break; }
 					default: { new_pos = pos + pos_req; break; }
 				}

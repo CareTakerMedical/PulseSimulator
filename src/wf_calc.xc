@@ -124,6 +124,10 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 					if (playing) {
 						playing = 0;
 						go_home = 1;
+						printstr("Got here, home[pb_i] = ");
+						printint(home[pb_i]);
+						printstr(", home[load_i] = ");
+						printintln(home[load_i]);
 					} // ends if playing
 				} // ends if
 				else {

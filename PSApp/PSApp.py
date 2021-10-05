@@ -521,6 +521,7 @@ class PSAppMainWindow(QMainWindow):
         self.pulse_thread.quit()
         self.pulse_thread.wait()
         self.wf_status.setText("Status: Playback ended.")
+        self.pulse_thread = None
 
     def _data_load_complete(self):
         self.pulse_loading_mb.close()
@@ -686,9 +687,11 @@ class PSAppMainWindow(QMainWindow):
                 self.pulse_thread.start()
                 self.pulse_loading_mb.show()
             else:
-                self.ps_state.set_state("play_mode",PlayMode.WAVEFORM)
-                # Come back to this, there's a lot of heavy lifting IMO that needs to happen with the data.  For now,
-                # just change it back
+                # This hasn't been implemented yet, so for now we'll pop up a warning and go back to
+                # being ready to play.
+                warn_dlg = QMessageBox()
+                warn_dlg.setText("Recorded waveform playback is not yet available.  Please select 'Pulse Table'.")
+                warn_dlg.exec()
                 self.play_button.setText("Play")
                 self.ps_state.set_state("playing",False)
 
@@ -828,7 +831,7 @@ class PSAppMainWindow(QMainWindow):
         QApplication.processEvents()
         success = False
         try:
-            gohome_ret = self.comm_interface.transaction(b'Z'+new_pos.encode(),True)
+            gohome_ret = self.comm_interface.transaction(b'Z'+new_pos.encode(),True,timeout=30)
             rem = re.match(b'^OK',gohome_ret)
             success = True if rem else False
         except:
@@ -839,6 +842,14 @@ class PSAppMainWindow(QMainWindow):
         if success:
             # Clean out the data interface
             xyz = self.data_iface["ser"].readline()
+        else:
+            rem = re.match(b'^ERR: Maximum step count',gohome_ret)
+            if rem:
+                # We probably need to warn the user that we were unsuccessful in sending the unit home
+                warn_dlg = QMessageBox()
+                warn_dlg.setWindowTitle("Warning")
+                warn_dlg.setText("Maximum step count exceeded.  Check power to the unit.")
+                warn_dlg.exec()
         self.ps_state.set_state("home",success)
         # Performing this action will undo any priming/calibrating, so set those variables accordingly
         self.ps_state.set_state("primed",False)

@@ -163,7 +163,9 @@ class PSAppPulsePlaybackWorker(PSAppPlaybackTools):
         self.data_iface["ser"].timeout = 1
         while True:
             try:
-                self.data_iface["ser"].readline()
+                res = self.data_iface["ser"].readline()
+                if (len(res) == 0):
+                    break
             except:
                 break
         self.finished.emit()

@@ -8,12 +8,12 @@ class PSAppCommInterface(object):
         """ Initialization function
         """
         self.cfg_iface = cfg_iface
-        self.cfg_iface.timeout = 0.5
 
-    def transaction(self,cmd,read_response=False):
+    def transaction(self,cmd,read_response=False,timeout=0.5):
         """ Send a command, do a handshake with the firmware, wait for a response if one is expected.
         """
         match = False
+        self.cfg_iface.timeout = timeout
         for i in range(10):
             self.cfg_iface.write(cmd+b'\n')
             ret = self.cfg_iface.readline()

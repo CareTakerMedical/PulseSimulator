@@ -11,6 +11,7 @@ class PSAppReadPressureWorker(QObject):
     new_reading = pyqtSignal(object)
     reading_error = pyqtSignal()
     comm_error = pyqtSignal()
+    finished = pyqtSignal()
     def __init__(self,comm_interface,data_iface):
         super(PSAppReadPressureWorker,self).__init__()
         self.comm_interface = comm_interface
@@ -46,6 +47,7 @@ class PSAppReadPressureWorker(QObject):
             else:
                 self.reading_error.emit()
             sleep(0.1)
+        self.finished.emit()
 
     def stop(self):
         self.is_running = False
@@ -137,10 +139,8 @@ class PSAppReadPressureDialog(QDialog):
             self.timer.stop()
         except:
             self.timer = None
+        self.worker.finished.connect(lambda: self._wait_for_thread_exit(False))
         self.worker.stop()
-        self.thread.quit()
-        self.thread.wait()
-        self.reject()
 
     def _indicate_comm_error(self):
         """ Communication has dropped, send out 'comm_issue' signal, followed by 'rejected' signal.
@@ -162,11 +162,12 @@ class PSAppReadPressureDialog(QDialog):
         self.current_pressure.setStyleSheet("font: 12pt;")
         self.current_pressure.setText("Primed! Closing...")
         QApplication.processEvents()
-        self.timer.stop()
+        try:
+            self.timer.stop()
+        except:
+            self.timer = None
+        self.worker.finished.connect(lambda: self._wait_for_thread_exit(True))
         self.worker.stop()
-        self.thread.quit()
-        self.thread.wait()
-        self.accept()
 
     def _update_pressure_reading(self,val):
         """ Add the value to the press_readings.  Start up the timer if it hasn't been started yet.
@@ -174,4 +175,14 @@ class PSAppReadPressureDialog(QDialog):
         self.press_readings.append(val)
         if not(self.timer.isActive()):
             self.timer.start()
+
+    def _wait_for_thread_exit(self,accept):
+        """ Try to do a proper thread shutdown.
+        """
+        self.thread.quit()
+        self.thread.wait()
+        if accept:
+            self.accept()
+        else:
+            self.reject()
 

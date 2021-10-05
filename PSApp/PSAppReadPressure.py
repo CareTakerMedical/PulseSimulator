@@ -117,11 +117,16 @@ class PSAppReadPressureDialog(QDialog):
             if ((press_display < self.pmin) or (press_display > self.pmax)):
                 self.prime_button.setEnabled(False)
                 if (press_display < self.pmin):
-                    self.current_pressure.setStyleSheet("font: 24pt; color: blue; font-weight: italic")
+                    self.current_pressure.setStyleSheet("font-size: 24pt; color: blue; font-style: italic")
                 else:
-                    self.current_pressure.setStyleSheet("font: 24pt; color: red; font-weight: italic")
+                    if (press_display > 250):
+                        # We're really out of range...
+                        self.current_pressure.setText("RANGE!")
+                        self.current_pressure.setStyleSheet("font-size: 16pt; color: black; font-style: italic")
+                    else:
+                        self.current_pressure.setStyleSheet("font-size: 24pt; color: red; font-style: italic")
             else:
-                self.current_pressure.setStyleSheet("font: 24pt; font-weight: normal")
+                self.current_pressure.setStyleSheet("font-size: 24pt; color: black; font-style: normal")
                 self.prime_button.setEnabled(True)
         else:
             self.current_pressure.setText("ERR")
@@ -132,7 +137,7 @@ class PSAppReadPressureDialog(QDialog):
     def _cancel_button_clicked(self):
         """ Stop the thread before exiting.
         """
-        self.current_pressure.setStyleSheet("font: 12pt; font-weight: normal")
+        self.current_pressure.setStyleSheet("font-sze: 12pt; color: black; font-style: normal")
         self.current_pressure.setText("Priming canceled! Closing...")
         QApplication.processEvents()
         try:
@@ -159,7 +164,7 @@ class PSAppReadPressureDialog(QDialog):
     def _prime_button_clicked(self):
         """ When the prime button is clicked, we'll send out the 'accepted' signal, but first we need to stop the thread.
         """
-        self.current_pressure.setStyleSheet("font: 12pt;")
+        self.current_pressure.setStyleSheet("font-size: 12pt; color: black; font-style: normal")
         self.current_pressure.setText("Primed! Closing...")
         QApplication.processEvents()
         try:

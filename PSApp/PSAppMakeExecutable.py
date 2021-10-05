@@ -50,6 +50,7 @@ try:
     # if something is fishy with the executable.
     temp_spec = os.path.join(tf.gettempdir(),'PulseSimulatorApp.spec')
     shutil.move('PulseSimulatorApp.exe.spec',temp_spec)
+    print("\nSpecification file is located at {}".format(temp_spec))
 except Exception as e:
     print("Exception encountered during creation of executable file:")
     if hasattr(e,'message'):

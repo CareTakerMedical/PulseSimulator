@@ -109,7 +109,7 @@ int handshake_cmd(client interface usb_cdc_interface cdc, char cmd)
 	return ret;
 }
 
-void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c_pos_req_cfg, chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend c_data_mode, chanend c_data_status, chanend c_mm_fault)
+void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c_pos_req_cfg, chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend c_data_mode, chanend c_data_status, chanend c_mm_fault, chanend c_wf_switch)
 {
 	int busy = 0;
 	int data_status = 0;
@@ -125,6 +125,11 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 
 	while(1){
 		select{
+		    case c_wf_switch :> int : {
+		        length = sprintf(pbuf,"OK: Waveform playback has begun.\n");
+		        cdc.write(pbuf,length);
+		        break;
+		    }
 		    case c_mm_fault :> mm_step_count : {
 		        busy = 0;
 		        c_mode <: MODE_IDLE;

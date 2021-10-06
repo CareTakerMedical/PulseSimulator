@@ -79,6 +79,7 @@ int main() {
     chan c_press_data;		// Raw output from the measurement_mgr to ps_data
     chan c_mm_ready;        // Handshake between the waveform player and the measurement manager
     chan c_mm_fault;        // Channel from the measurement manager to ps_config to alert ps_config of potential issues.
+    chan c_wf_switch;       // Alert ps_config that the waveform calculator is now playing back the last loaded dataset
 
     /* I2C interface */
     i2c_master_if i2c[1];
@@ -92,9 +93,9 @@ int main() {
         on USB_TILE: CdcEndpointsHandler(c_ep_in[CDC_NOTIFICATION_EP_NUM2], c_ep_out[CDC_DATA_RX_EP_NUM2], c_ep_in[CDC_DATA_TX_EP_NUM2], cdc_data[1]);
 
 	/* Pulse Simulator Comms and Playback Stuff */
-        on tile[0]: ps_config(cdc_data[0], c_mode, c_pos_req_cfg, c_wf_mode, c_wf_data, c_wf_params, c_data_mode, c_data_status, c_mm_fault);
+        on tile[0]: ps_config(cdc_data[0], c_mode, c_pos_req_cfg, c_wf_mode, c_wf_data, c_wf_params, c_data_mode, c_data_status, c_mm_fault, c_wf_switch);
         on tile[0]: ps_data(cdc_data[1], c_data_mode, c_data_status, c_press_data);
-        on tile[0]: wf_calc(c_wf_mode, c_wf_data, c_wf_params, c_pos_req_wf, c_mm_ready);
+        on tile[0]: wf_calc(c_wf_mode, c_wf_data, c_wf_params, c_pos_req_wf, c_mm_ready, c_wf_switch);
         on tile[0]: measurement_mgr(i2c[0], c_mode, c_pos_req_cfg, c_pos_req_wf, c_press_data, c_mm_ready, c_mm_fault);
         on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 100);
         on tile[0]: chip_reset();

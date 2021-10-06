@@ -36,7 +36,7 @@ extern signed short sine_table_hr[257];
 	return {0,0};
 }
 
-void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend c_pos_req_wf, chanend c_mm_ready)// chanend c_wf_calc_debug)
+void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend c_pos_req_wf, chanend c_mm_ready, chanend c_wf_switch)
 {
 	int heart_rate[2];
 	int resp_rate[2];
@@ -53,6 +53,7 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 	unsigned int tnext, t0, t;
 	int deltat, tstep;
 	int ind, frac;
+	int prev_ind = 0;
 	int currentp, nextp, deltap;
 	int rrhr, rrbp;
 	int state = WF_IDLE;
@@ -60,6 +61,7 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 	int go_home = 0;
 	int load_i = 0;
 	int pb_i = 1;
+	int look_for_crossing = 0;
 
 	while (1) {
 		select {
@@ -70,7 +72,19 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 					// but for now I'll just deal with the pulse table.
 				    while (1) {
 				        tnext += 2000000;
+				        prev_ind = ind;
 				        ind = wave_index >> 8;
+				        if (look_for_crossing) {
+				            if (prev_ind > ind) {
+				                // We've got ourselves a crossing...  Perform the
+				                // switcheroo between the load parameters and the
+				                // playback parameters.
+				                pb_i = load_i;
+				                load_i = (load_i > 0) ? 0 : 1;
+				                look_for_crossing = 0;
+				                c_wf_switch <: 1;
+				            }
+				        }
 				        frac = wave_index & 0xFF;
 				        nextp = (wf_pts[pb_i][ind]*(256-frac)+wf_pts[pb_i][(ind + 1)]*frac) >> 8;
 				        ind = resp_index >> 8;
@@ -147,10 +161,6 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 					            c_wf_mode <: wf_size[load_i];
 					            pb_i = load_i;
 					            load_i = (load_i > 0) ? 0 : 1;
-					            printstr("Check pb_i and load_i; pb_i = ");
-					            printint(pb_i);
-					            printstr(", load_i = ");
-					            printintln(load_i);
 					            // This is also where we'll do some initialization
 					            // before diving in to the playback portion.
 					            {mean,range} = calculate_mean_and_range(wf_pts[pb_i],wf_size[pb_i]);
@@ -165,15 +175,21 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 					            // The only states left are the playback states.
 					            // At this point, set the state and turn on playback
 					            state = tstate;
-					            playing = 1;
-					            currentp = wf_pts[pb_i][0];
-					            wave_index = heart_rate[pb_i];
-					            resp_index = resp_rate[pb_i];
-					            c_pos_req_wf <: MIN_STRIDE_TIME; // Speed
-					            c_pos_req_wf <: currentp; // Position
-					            c_pos_req_wf <: 100000000; // Settling time
-					            tmr :> t0;
-					            tnext = t0 + 100000000;  // 20ms window
+					            if (playing) {
+					                look_for_crossing = 1;
+					            }
+					            else {
+					                c_wf_switch <: 1;
+					                playing = 1;
+					                currentp = wf_pts[pb_i][0];
+					                wave_index = heart_rate[pb_i];
+					                resp_index = resp_rate[pb_i];
+					                c_pos_req_wf <: MIN_STRIDE_TIME; // Speed
+					                c_pos_req_wf <: currentp; // Position
+					                c_pos_req_wf <: 100000000; // Settling time
+					                tmr :> t0;
+					                tnext = t0 + 100000000;  // 20ms window
+					            }
 					        }
 					        break;
 					    } // ends case WF_END_LOAD

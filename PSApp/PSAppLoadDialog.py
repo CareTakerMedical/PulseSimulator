@@ -77,7 +77,7 @@ class PSAppLoadWorker(QObject):
                     mmhg_vals = []
                     delta = writes["systolic"] - writes["diastolic"]
                     for val in table_init:
-                        mmhg_vals.append((float(val) - min(table_init)) / table_span * delta + writes["diastolic"])
+                        mmhg_vals.append((int(val) - min(table_init)) / table_span * delta + writes["diastolic"])
                     # Take the pressure values and convert them to positions
                     positions = []
                     for i in range(len(mmhg_vals)):
@@ -251,6 +251,7 @@ class PSAppLoadDialog(QDialog):
         QApplication.processEvents()
 
     def _process_new_parameter_value(self,param,val):
+        val = int(val)
         self.new_parameter_value.emit(param,val)
         if (param == "systolic"):
             self.systolic_label.setText("Systolic: {}".format(val))

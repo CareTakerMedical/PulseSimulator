@@ -345,12 +345,12 @@ class PSAppMainWindow(QMainWindow):
         # 'Primed' region
         prime_min_label = QLabel("Prime Minimum:")
         prime_min_label.setToolTip("If the 'primed' pressure region is below this number, say that priming is invalid.")
-        self.prime_min_le = RangeIntLineEdit(50,minimum=25,maximum=75)
+        self.prime_min_le = RangeIntLineEdit(50,minimum=5,maximum=95)
         self.prime_min_le.illegal_value.connect(lambda: self.twidget.setTabEnabled(0,False))
         self.prime_min_le.legal_value.connect(self._check_config_tab)
         prime_max_label = QLabel("Prime Maximum:")
         prime_max_label.setToolTip("If the 'primed' pressure region is above this number, say that priming is invalid.")
-        self.prime_max_le = RangeIntLineEdit(60,minimum=25,maximum=75)
+        self.prime_max_le = RangeIntLineEdit(60,minimum=5,maximum=95)
         self.prime_max_le.illegal_value.connect(lambda: self.twidget.setTabEnabled(0,False))
         self.prime_max_le.legal_value.connect(self._check_config_tab)
         prime_layout = QHBoxLayout()
@@ -640,11 +640,11 @@ class PSAppMainWindow(QMainWindow):
         state_var = le.get_var()
         # First, make sure the inputted value is a number
         try:
-            fval = float(le.text())
+            fval = int(le.text())
             le.setStyleSheet("color: black")
             le.set_valid(True)
             # If this worked, see if it's different than the stored number
-            old_fval = float(self.ps_state.get_state(state_var))
+            old_fval = int(self.ps_state.get_state(state_var))
             if (fval != old_fval):
                 le.setStyleSheet("font-weight: bold")
                 le.set_valid(False)
@@ -653,13 +653,13 @@ class PSAppMainWindow(QMainWindow):
                 enable_refresh = False
             # Need to make sure systolic is greater than diastolic
             if (state_var == "systolic"):
-                dval = float(self.diastolic_le.text())
+                dval = int(self.diastolic_le.text())
                 if (fval <= dval):
                     le.setStyleSheet("font-weight: bold; color: red")
                     enable_refresh = False
                     le.set_valid(False)
             if (state_var == "diastolic"):
-                sval = float(self.systolic_le.text())
+                sval = int(self.systolic_le.text())
                 if (fval >= sval):
                     le.setStyleSheet("font-weight: bold; color: red")
                     enable_refresh = False
@@ -731,10 +731,10 @@ class PSAppMainWindow(QMainWindow):
         if playing:
             prev_ps_state = copy.deepcopy(self.ps_state)
         ps_state_valid = True
-        self.ps_state.set_state("systolic",float(self.systolic_le.text()))
-        self.ps_state.set_state("diastolic",float(self.diastolic_le.text()))
-        self.ps_state.set_state("heart_rate",float(self.heart_rate_le.text()))
-        self.ps_state.set_state("respiration_rate",float(self.respiration_rate_le.text()))
+        self.ps_state.set_state("systolic",int(self.systolic_le.text()))
+        self.ps_state.set_state("diastolic",int(self.diastolic_le.text()))
+        self.ps_state.set_state("heart_rate",int(self.heart_rate_le.text()))
+        self.ps_state.set_state("respiration_rate",int(self.respiration_rate_le.text()))
         # Now go through each of the line edits and 'correct the record', as it were...
         for le in [self.systolic_le,self.diastolic_le,self.heart_rate_le,self.respiration_rate_le]:
             self._eval_param_entry(le)

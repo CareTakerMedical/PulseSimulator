@@ -8,11 +8,12 @@ from PSAppDefaults import *
 from PSAppConnect import PSAppConnectionManager
 from PSAppReadPressure import PSAppReadPressureDialog
 from PSAppCalibrate import PSAppCalibrationWorker
-from PSAppPlayback import PSAppPulsePlaybackWorker
+from PSAppLoadDialog import PSAppLoadDialog
 from PSAppCommInterface import PSAppCommInterface
+from PSAppPlayback import PSAppPulsePlaybackWorker
 from serial.tools.list_ports import comports
 from time import sleep
-import re
+import re,copy
 
 class MagicLabel(QLabel):
     """ When this label is double-clicked, it emits a signal letting us know...
@@ -206,6 +207,13 @@ class PSAppMainWindow(QMainWindow):
         self.heart_rate_le.textChanged.connect(lambda x: self._eval_param_entry(self.heart_rate_le))
         self.respiration_rate_le = StateAssociatedLineEdit(self.ps_state,"respiration_rate")
         self.respiration_rate_le.textChanged.connect(lambda x: self._eval_param_entry(self.respiration_rate_le))
+
+        # Associate the above line edits with their parameter
+        self.sa_les = dict()
+        self.sa_les["systolic"] = self.systolic_le
+        self.sa_les["diastolic"] = self.diastolic_le
+        self.sa_les["heart_rate"] = self.heart_rate_le
+        self.sa_les["respiration_rate"] = self.respiration_rate_le
 
         # Create a layout for the waveform parameters
         param_layout = QGridLayout()
@@ -406,6 +414,7 @@ class PSAppMainWindow(QMainWindow):
         self.about_layout = QVBoxLayout()
         self.app_version_label = MagicLabel("Pulse Simulator App Version: {}".format(get_psapp_version()))
         self.app_version_label.double_clicked.connect(self._add_manual_buttons)
+        self.fw_version_label = QLabel("Pulse Simulator Firmware Version: ")
         # Magic buttons that don't appear until 'conjured'
         self.move_near = QPushButton("Near")
         self.move_near.setAutoRepeat(True)
@@ -418,6 +427,7 @@ class PSAppMainWindow(QMainWindow):
         self.move_far.setAutoRepeatInterval(250)
         self.move_far.clicked.connect(lambda: self._increment(10))
         self.about_layout.addWidget(self.app_version_label)
+        self.about_layout.addWidget(self.fw_version_label)
         self.about_layout.addWidget(QLabel("For issues, contact Jake Wegman (jake@caretakermedical.net)"))
         self.about_widget.setLayout(self.about_layout)
 
@@ -434,12 +444,12 @@ class PSAppMainWindow(QMainWindow):
         self.connect_button = QPushButton("Connect")
         self.connect_button.clicked.connect(self._launch_connect)
         # Also probably want an exit button
-        exit_button = QPushButton("Exit")
-        exit_button.clicked.connect(self.close)
+        self.exit_button = QPushButton("Exit")
+        self.exit_button.clicked.connect(self._graceful_close)
         connect_layout = QHBoxLayout()
         connect_layout.addWidget(self.cs_label)
         connect_layout.addWidget(self.connect_button)
-        connect_layout.addWidget(exit_button)
+        connect_layout.addWidget(self.exit_button)
         cs_box.setLayout(connect_layout)
 
         # Add the tab widget and the 'connect state' widget to a central widget
@@ -449,6 +459,11 @@ class PSAppMainWindow(QMainWindow):
         cwidget.setLayout(layout)
         self.setCentralWidget(cwidget)
 
+        # When we go to load the various points, we'll pop up a dialog.  If there are failures along
+        # the way, we'll want to communicate as such with this dialog, so at least have a variable
+        # around to track it.
+        self.load_dlg = None
+
         self.show()
 
         # Interfaces
@@ -456,8 +471,24 @@ class PSAppMainWindow(QMainWindow):
         self.data_iface = None
         self.comm_interface = None
 
+        # Playback thread/worker
+        self.playback_thread = None
+        self.playback_worker = None
+
         # Launch the connection dialog
         self._launch_connect()
+
+    def get_cal_max(self):
+        return self.cal_max_le.text()
+
+    def get_comm_interface(self):
+        return self.comm_interface
+
+    def get_pulse_table_file(self):
+        return self.pt_le.text()
+
+    def get_ps_state(self):
+        return self.ps_state
 
     def _add_manual_buttons(self):
         """ Add buttons for incrementing/decrementing system manually, i.e. a kind of manual override.
@@ -518,10 +549,13 @@ class PSAppMainWindow(QMainWindow):
     def _confirm_pulse_table_end(self):
         """ Confirm that the pulse table thread has ended successfully.
         """
-        self.pulse_thread.quit()
-        self.pulse_thread.wait()
+        try:
+            self.playback_thread.quit()
+            self.playback_thread.wait()
+        except:
+            pass
         self.wf_status.setText("Status: Playback ended.")
-        self.pulse_thread = None
+        self.playback_thread = None
 
     def _data_load_complete(self):
         self.pulse_loading_mb.close()
@@ -569,6 +603,7 @@ class PSAppMainWindow(QMainWindow):
             QApplication.processEvents()
             self.cal_thread.quit()
             self.cal_thread.wait()
+            self.exit_button.setEnabled(True)
             self._set_widget_status()
         else:
             # There was an error.  Wait for the original cal thread to terminate, and then
@@ -644,16 +679,19 @@ class PSAppMainWindow(QMainWindow):
             self.play_button.setText("Play")
             self.ps_state.set_state("playing",False)
             if (self.ps_state.get_state("play_mode") == PlayMode.PULSE_TABLE):
-                self.pulse_worker.stop_playback()
+                self.playback_worker.stop_playback()
                 self.wf_status.setText("Status:  Idle")
                 QApplication.processEvents()
+                self.playback_thread.quit()
+                self.playback_thread.wait()
+                self.playback_worker = None
+                self.playback_thread = None
             else:
                 pass
                 #self.wf_worker.stop_playback()
         else:
             # In either case, make sure ps_state is properly updated
             self.play_button.setText("Stop")
-            self.ps_state.set_state("playing",True)
             self.ps_state.set_state("systolic",int(self.systolic_le.text()))
             self.ps_state.set_state("diastolic",int(self.diastolic_le.text()))
             self.ps_state.set_state("heart_rate",int(self.heart_rate_le.text()))
@@ -662,30 +700,21 @@ class PSAppMainWindow(QMainWindow):
             self._clear_plot()
             if (self.play_type_toggle.value() == 0):
                 self.ps_state.set_state("play_mode",PlayMode.PULSE_TABLE)
-                # Pulse Table; launch in the background the thread that's going to handle everything.  We'll
-                # give it the ps_state, and then it will feed us points and any other information we may
-                # need as it does its thing.
-                self.pulse_thread = QThread()
-                self.pulse_worker = PSAppPulsePlaybackWorker(self.pt_le.text(),self.ps_state,self.comm_interface,self.data_iface,self.cal_max_le.text())
-                self.pulse_worker.moveToThread(self.pulse_thread)
-                self.pulse_worker.table_read_error.connect(self._pulse_table_read_error)
-                self.pulse_worker.wf_load_fail.connect(self._pulse_table_wf_load_error)
-                self.pulse_worker.new_data_point.connect(self._plot_new_datapoint)
-                self.pulse_worker.bad_message_format.connect(self._bad_message_format_alert)
-                self.pulse_worker.data_read_fail.connect(self._data_read_fail_alert)
-                self.pulse_worker.data_load_complete.connect(self._data_load_complete)
-                self.pulse_worker.finished.connect(self._confirm_pulse_table_end)
-                self.pulse_thread.started.connect(self.pulse_worker.run)
-                # Right before we start, throw up a message box that blocks the user from playing
-                # with the GUI, since it can take quite a while to load all of the points into
-                # the memory on the firmware.
-                self.wf_status.setText("Status:  Loading point into memory.")
-                QApplication.processEvents()
-                self.pulse_loading_mb = QMessageBox()
-                self.pulse_loading_mb.setText("Loading the points into memory.  Please be patient...")
-                self.pulse_loading_mb.setWindowModality(Qt.WindowModal)
-                self.pulse_thread.start()
-                self.pulse_loading_mb.show()
+                self.playback_thread = QThread()
+                self.playback_worker = PSAppPulsePlaybackWorker(self.comm_interface,self.data_iface)
+                self.playback_worker.moveToThread(self.playback_thread)
+                self.playback_worker.new_data_point.connect(self._plot_new_datapoint)
+                self.playback_worker.bad_message_format.connect(self._bad_message_format_alert)
+                self.playback_worker.data_read_fail.connect(self._data_read_fail_alert)
+                self.playback_worker.finished.connect(self._confirm_pulse_table_end)
+                self.playback_thread.started.connect(self.playback_worker.run)
+                self.load_dlg = PSAppLoadDialog(self)
+                self.load_dlg.accepted.connect(self._load_complete)
+                self.load_dlg.rejected.connect(self._load_error)
+                self.load_dlg.new_parameter_value.connect(self._load_param_update)
+                self.load_dlg.playback_ack.connect(self.playback_thread.start)
+                self.load_dlg.setWindowModality(Qt.WindowModal)
+                self.load_dlg.show()
             else:
                 # This hasn't been implemented yet, so for now we'll pop up a warning and go back to
                 # being ready to play.
@@ -698,6 +727,10 @@ class PSAppMainWindow(QMainWindow):
     def _eval_refresh(self):
         """ Compare the values with those stored away; at some point, we'll bring up a dialog that asks the user to wait while the new values are written to the firmware.
         """
+        playing = self.ps_state.get_state("playing")
+        if playing:
+            prev_ps_state = copy.deepcopy(self.ps_state)
+        ps_state_valid = True
         self.ps_state.set_state("systolic",float(self.systolic_le.text()))
         self.ps_state.set_state("diastolic",float(self.diastolic_le.text()))
         self.ps_state.set_state("heart_rate",float(self.heart_rate_le.text()))
@@ -705,14 +738,50 @@ class PSAppMainWindow(QMainWindow):
         # Now go through each of the line edits and 'correct the record', as it were...
         for le in [self.systolic_le,self.diastolic_le,self.heart_rate_le,self.respiration_rate_le]:
             self._eval_param_entry(le)
-        self.refresh_button.setEnabled(False)
-        self._set_widget_status()
+            if not le.get_valid():
+                ps_state_valid = False
+        if (ps_state_valid and playing):
+            # This is where we setup and launch the dialog, and then we connect the signals
+            # appropriately.
+            self.load_dlg = None
+            self.load_dlg = PSAppLoadDialog(self,prev_ps_state)
+            self.load_dlg.accepted.connect(self._load_complete)
+            self.load_dlg.rejected.connect(self._load_error)
+            self.load_dlg.new_parameter_value.connect(self._load_param_update)
+            self.load_dlg.setWindowModality(Qt.WindowModal)
+            self.load_dlg.show()
 
     def _first_cal_procedure(self):
         """ Change the status text appropriately, and then start the calibration procedure.
         """
         self.wf_status.setText("Status: Running calibration procedure.")
         self._start_cal_procedure()
+
+    def _graceful_close(self):
+        """ Shutdown any threads that might be running, close down communication channels, then close down.  Pop up a window indicating that we've received the message.
+        """
+        warn_dlg = QMessageBox()
+        warn_dlg.setText("Shutting down gracefully...")
+        warn_dlg.show()
+        if self.ps_state.get_state("playing"):
+            self._eval_play_stop()
+        # By this point, any playback that was happening should be over.  Kill the connection checker
+        try:
+            self.worker.stop()
+            self.thread.quit()
+            self.thread.wait()
+        except:
+            pass
+        # Formally close the serial connections
+        for x in [self.cfg_iface,self.data_iface]:
+            if x:
+                try:
+                    x["ser"].close()
+                except:
+                    pass
+        # And close down the app
+        warn_dlg.close()
+        self.close()
 
     def _hardware_disconnect_event(self):
         """ We sense that the COM device that we're supposed to use has gone away.
@@ -724,6 +793,13 @@ class PSAppMainWindow(QMainWindow):
         # Update the connection text
         self.cs_label.setText("Connection status:  Not connected")
         self.ps_state.set_state("connected",False)
+        self.ps_state.set_state("playing",False)
+        self.fw_version_label.setText("Pulse Simulator Firmware Version: ")
+        try:
+            self.load_dlg.close()
+            self.load_dlg = None
+        except:
+            pass
         self.connect_button.setEnabled(True)
         self._set_widget_status()
         warn_dlg = QMessageBox()
@@ -777,6 +853,27 @@ class PSAppMainWindow(QMainWindow):
             self.worker.disconnected.connect(self._hardware_disconnect_event)
             self.thread.start()
 
+    def _load_complete(self):
+        """ All loading seems to have gone smoothly, so update status accordingly.
+        """
+        self.load_dlg = None
+        self.wf_status.setText("Status: Playing")
+        QApplication.processEvents()
+
+    def _load_error(self):
+        """ Loading did not go smoothly.  Update state accordingly, as well as status.
+        """
+        self.load_dlg = None
+        self.ps_state.set_state("playing",False)
+        self.wf_status.setText("Status: Idle")
+        QApplication.processEvents()
+
+    def _load_param_update(self,param,val):
+        """ Update values as they come in.
+        """
+        self.ps_state.set_state(param,val)
+        self.sa_les[param].setText(str(val))
+
     def _plot_new_datapoint(self,xy):
         """ New set of datapoints has come in, plot them here.
         """
@@ -796,29 +893,12 @@ class PSAppMainWindow(QMainWindow):
             self.plot_x = []
             self.plot_y = []
 
-    def _pulse_table_read_error(self):
-        """ There was bad data in the pulse table file.
-        """
-        self.pulse_loading_mb.close()
-        warn_dlg = QMessageBox()
-        warn_dlg.setText("Malformed data in the file {}".format(self.pt_le.text()))
-        warn_dlg.exec()
-        self._eval_play_stop()
-
-    def _pulse_table_wf_load_error(self):
-        """ Communication broke down at some point when loading the pulse table.
-        """
-        self.pulse_loading_mb.close()
-        warn_dlg = QMessageBox()
-        warn_dlg.setText("Loading of the pulse table failed.")
-        warn_dlg.exec()
-        self._eval_play_stop()
-
     def _rp_comm_issue(self):
         """ Shutdown the dialog if communication breaks down.
         """
         self.rp_dlg.close()
         self.wf_status.setText("Status: Idle")
+        QApplication.processEvents()
 
     def _send_home_clicked(self):
         """ Callback for when the 'Send Home' button is clicked.
@@ -889,12 +969,16 @@ class PSAppMainWindow(QMainWindow):
         self.read_pressure_button.setEnabled(connect_state and home_state)
         self.run_cal_button.setEnabled(connect_state and primed_state)
 
+        # Refresh button 
+        self.refresh_button.setEnabled((self.refresh_button.isEnabled() and connect_state))
+
         # The 'play' button is only enabled if:
         #    * All three of the 'steps' buttons above are enabled (i.e., connect_state, home_state,
         #      primed_state, and cal_state are all True
         #    * If we're in 'Waveform' playback mode, the playback file is valid.
         #    * If we're in 'Pulse' playback mode, the pulse data file is valid.
         #    * All of the line edits are valid if we're in 'Pulse' playback mode.
+        #    * The 'Refresh' button is NOT enabled and we're not currently playing
         play_button_enable = connect_state and cal_state
         if play_button_enable:
             if (self.play_type_toggle.value() == PlayMode.PULSE_TABLE):
@@ -903,14 +987,14 @@ class PSAppMainWindow(QMainWindow):
                     play_button_enable &= x.get_valid()
             else:
                 play_button_enable &= self.wf_le.get_valid()
+        play_button_enable &= (not(self.refresh_button.isEnabled() and not(self.ps_state.get_state("playing"))))
         self.play_button.setEnabled(play_button_enable)
-
-        # Refresh button 
-        self.refresh_button.setEnabled((self.refresh_button.isEnabled() and connect_state))
 
     def _start_cal_procedure(self):
         """ We'll kick off a thread that will run the routine, and then pass the data back to us via signalling.
         """
+        # Disable the 'Exit' button so that I don't have to worry about this thread
+        self.exit_button.setEnabled(False)
         self.cal_thread = QThread()
         xmin = int(self.home_pos_le.text())
         xmax = int(self.cal_max_le.text())
@@ -969,6 +1053,7 @@ class PSAppMainWindow(QMainWindow):
         self.ps_state.set_state("calibrated",False)
         self.cal_thread.quit()
         self.cal_thread.wait()
+        self.exit_button.setEnabled(True)
         self._set_widget_status()
 
     def _update_calibration_plot(self,vals):
@@ -988,3 +1073,9 @@ class PSAppMainWindow(QMainWindow):
         self.ps_state.set_state("connected",cs_connected)
         self.connect_button.setEnabled(not(cs_connected))
         self._set_widget_status()
+        # If we're connected, check the firmware version
+        if cs_connected:
+            self.cfg_iface["ser"].write(b'V')
+            rem = re.match(b'^Version:\s+([0-9a-fA-F\+]+)',self.cfg_iface["ser"].readline())
+            if rem:
+                self.fw_version_label.setText("Pulse Simulator Firmware Version: {}".format(rem.group(1).decode()))

@@ -137,7 +137,7 @@ class PSAppReadPressureDialog(QDialog):
     def _cancel_button_clicked(self):
         """ Stop the thread before exiting.
         """
-        self.current_pressure.setStyleSheet("font-sze: 12pt; color: black; font-style: normal")
+        self.current_pressure.setStyleSheet("font-size: 12pt; color: black; font-style: normal")
         self.current_pressure.setText("Priming canceled! Closing...")
         QApplication.processEvents()
         try:

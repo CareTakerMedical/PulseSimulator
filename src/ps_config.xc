@@ -5,6 +5,7 @@
 #include <print.h>
 #include "xud_cdc.h"
 #include "ps_indicators.h"
+#include "ps_version.h"
 
 //void printd(chanend c_channel, const char * msg);
 
@@ -308,6 +309,13 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 							cdc.write(pbuf,length);
 							//printd(c_ps_config_debug,"Interface query complete\n");
 							//printd(c_ps_config_debug,"Interface query complete again\n");
+						}
+						else if (pbuf[0] == 'V') {
+						    if (DIRTY)
+						        length = sprintf(pbuf,"Version: %c%c%c%c%c%c%c%c%c\n",fw_version[0],fw_version[1],fw_version[2],fw_version[3],fw_version[4],fw_version[5],fw_version[6],fw_version[7],'+');
+						    else
+						        length = sprintf(pbuf,"Version: %c%c%c%c%c%c%c%c\n",fw_version[0],fw_version[1],fw_version[2],fw_version[3],fw_version[4],fw_version[5],fw_version[6],fw_version[7]);
+						    cdc.write(pbuf,length);
 						}
 						else {
 							cdc.flush_buffer();

@@ -72,7 +72,6 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 					// but for now I'll just deal with the pulse table.
 				    while (1) {
 				        tnext += 2000000;
-				        prev_ind = ind;
 				        ind = wave_index >> 8;
 				        if (look_for_crossing) {
 				            if (prev_ind > ind) {
@@ -82,9 +81,10 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 				                pb_i = load_i;
 				                load_i = (load_i > 0) ? 0 : 1;
 				                look_for_crossing = 0;
-				                c_wf_switch <: 1;
+				                c_wf_switch <: ind;
 				            }
 				        }
+				        prev_ind = ind;
 				        frac = wave_index & 0xFF;
 				        nextp = (wf_pts[pb_i][ind]*(256-frac)+wf_pts[pb_i][(ind + 1)]*frac) >> 8;
 				        ind = resp_index >> 8;
@@ -148,8 +148,9 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 					        // When transitioning from this state, the only valid
 					        // next state is 'WF_LOAD'.  Other states will result
 					        // in no action.
-					        if (tstate == WF_LOAD)
+					        if (tstate == WF_LOAD) {
 					            state = tstate;
+					        }
 					        break;
 					    } // ends case WF_IDLE
 					    case WF_LOAD: {
@@ -159,8 +160,10 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 					        if (tstate == WF_END_LOAD) {
 					            state = tstate;
 					            c_wf_mode <: wf_size[load_i];
-					            pb_i = load_i;
-					            load_i = (load_i > 0) ? 0 : 1;
+					            if (playing == 0) {
+					                pb_i = load_i;
+					                load_i = (load_i > 0) ? 0 : 1;
+					            }
 					            // This is also where we'll do some initialization
 					            // before diving in to the playback portion.
 					            {mean,range} = calculate_mean_and_range(wf_pts[pb_i],wf_size[pb_i]);
@@ -198,8 +201,10 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 					        // transition to 'WF_IDLE', which has already been
 					        // covered, or we can transition to 'WF_LOAD'.  Other
 					        // transitions will be disallowed
-					        if (tstate == WF_LOAD)
+					        if (tstate == WF_LOAD) {
 					            state = tstate;
+					            wf_size[load_i] = 0;
+					        }
 					        break;
 					    } // ends default
 				    } // ends switch
@@ -217,9 +222,10 @@ void wf_calc(chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend 
 					case HOME_ID:
 						home = tcfg >> 4;
 						break;
-					case HR_ID:
+					case HR_ID: {
 						heart_rate[load_i] = tcfg >> 4;
 						break;
+					}
 					case RR_ID:
 						resp_rate[load_i] = tcfg >> 4;
 						break;

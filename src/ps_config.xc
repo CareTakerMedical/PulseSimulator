@@ -121,13 +121,14 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 	int pb_stop = 0;
 	int mm_step_count = 0;
 	int request_length = 0;
+	int crossing_index = 0;
 	unsigned int length;
 	char pbuf[128];
 
 	while(1){
 		select{
-		    case c_wf_switch :> int : {
-		        length = sprintf(pbuf,"OK: Waveform playback has begun.\n");
+		    case c_wf_switch :> crossing_index : {
+		        length = sprintf(pbuf,"OK: Waveform playback has begun, crossing_index = %d.\n",crossing_index);
 		        cdc.write(pbuf,length);
 		        break;
 		    }

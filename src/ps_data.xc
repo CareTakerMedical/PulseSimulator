@@ -33,8 +33,10 @@ void ps_data(client interface usb_cdc_interface cdc, chanend c_data_mode, chanen
 			case c_data_mode :> mode : {
 				ready = 1;
 				store_pos = 0;
-				timer_on = 0;
-				tms = 0;
+				if (mode != MODE_WAVEFORM) {
+				    timer_on = 0;
+				    tms = 0;
+				}
 				switch (mode) {
 					case MODE_SET_HOME:
 						mode_header = 'H';

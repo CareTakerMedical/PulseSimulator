@@ -25,15 +25,32 @@ on tile[0]: port p_button = XS1_PORT_4E;
 
 void chip_reset()
 {
-    int button_val;
-    timer tmr;
-    unsigned int t;
     unsigned int tileId;
     unsigned int pllVal;
     unsigned int tileArrayLength;
     unsigned int localTileId = get_local_tile_id();
 
     asm volatile ("ldc %0, tile.globound":"=r"(tileArrayLength));
+
+    for (int i = 0; i < tileArrayLength; i++) {
+    	tileId = get_tile_id(tile[1]);
+        if (localTileId != tileId) {
+            read_sswitch_reg(tileId, 6, pllVal);
+            pllVal &= 0x7FFFFFFF;
+            write_sswitch_reg_no_ack(tileId, 6, pllVal);
+        }
+    }
+    // And now do tile 0
+    read_sswitch_reg(localTileId, 6, pllVal);
+    pllVal &= 0x7FFFFFFF;
+    write_sswitch_reg_no_ack(localTileId, 6, pllVal);
+}
+
+void watch_button()
+{
+    int button_val;
+    timer tmr;
+    unsigned int t;
 
     while (1) {
         p_button :> button_val;
@@ -45,21 +62,37 @@ void chip_reset()
             p_button :> button_val;
             if ((button_val & 0x1) == 0) {
                 while ((button_val & 0x1) == 0) p_button :> button_val;
-                for (int i = 0; i < tileArrayLength; i++) {
-                    tileId = get_tile_id(tile[1]);
-                    if (localTileId != tileId) {
-                        read_sswitch_reg(tileId, 6, pllVal);
-                        pllVal &= 0x7FFFFFFF;
-                        write_sswitch_reg_no_ack(tileId, 6, pllVal);
-                    }
-                }
-                // And now do tile 0
-                read_sswitch_reg(localTileId, 6, pllVal);
-                pllVal &= 0x7FFFFFFF;
-                write_sswitch_reg_no_ack(localTileId, 6, pllVal);
+                chip_reset();
             }
         }
     }
+}
+
+void watchdog(chanend c_alive)
+{
+	timer tmr;
+	unsigned int t;
+
+	// Wait to get a signal over 'c_alive' that we're ready to start the watchdog.
+	c_alive :> int;
+	// Get the initial time;
+	tmr :> t;
+	// Sit in a loop, waiting for the timer to go off.  If we got a signal before the timer
+	// goes off, we'll reset the timer.  If we don't, we'll run 'chip_reset'.
+	while (1) {
+		select {
+			case tmr when timerafter(t + 1000000000) :> t : {
+				chip_reset();
+				break;
+			}
+			case c_alive :> int : {
+				tmr :> t;
+				break;
+			}
+			default:
+				break;
+		}
+	}
 }
 
 int main() {
@@ -80,6 +113,7 @@ int main() {
     chan c_mm_ready;        // Handshake between the waveform player and the measurement manager
     chan c_mm_fault;        // Channel from the measurement manager to ps_config to alert ps_config of potential issues.
     chan c_wf_switch;       // Alert ps_config that the waveform calculator is now playing back the last loaded dataset
+    chan c_alive;		// Watchdog channel, we'll restart ourselves if we don't hear anything from the user application at least once every 10 seconds.
 
     /* I2C interface */
     i2c_master_if i2c[1];
@@ -93,12 +127,13 @@ int main() {
         on USB_TILE: CdcEndpointsHandler(c_ep_in[CDC_NOTIFICATION_EP_NUM2], c_ep_out[CDC_DATA_RX_EP_NUM2], c_ep_in[CDC_DATA_TX_EP_NUM2], cdc_data[1]);
 
 	/* Pulse Simulator Comms and Playback Stuff */
-        on tile[0]: ps_config(cdc_data[0], c_mode, c_pos_req_cfg, c_wf_mode, c_wf_data, c_wf_params, c_data_mode, c_data_status, c_mm_fault, c_wf_switch);
+        on tile[0]: ps_config(cdc_data[0], c_mode, c_pos_req_cfg, c_wf_mode, c_wf_data, c_wf_params, c_data_mode, c_data_status, c_mm_fault, c_wf_switch, c_alive);
         on tile[0]: ps_data(cdc_data[1], c_data_mode, c_data_status, c_press_data);
         on tile[0]: wf_calc(c_wf_mode, c_wf_data, c_wf_params, c_pos_req_wf, c_mm_ready, c_wf_switch);
         on tile[0]: measurement_mgr(i2c[0], c_mode, c_pos_req_cfg, c_pos_req_wf, c_press_data, c_mm_ready, c_mm_fault);
         on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 100);
-        on tile[0]: chip_reset();
+        on tile[0]: watch_button();
+        on tile[0]: watchdog(c_alive);
     }
     return 0;
 }

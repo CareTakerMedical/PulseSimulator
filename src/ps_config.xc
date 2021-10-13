@@ -110,7 +110,7 @@ int handshake_cmd(client interface usb_cdc_interface cdc, char cmd)
 	return ret;
 }
 
-void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c_pos_req_cfg, chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend c_data_mode, chanend c_data_status, chanend c_mm_fault, chanend c_wf_switch)
+void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c_pos_req_cfg, chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend c_data_mode, chanend c_data_status, chanend c_mm_fault, chanend c_wf_switch, chanend c_alive)
 {
 	int busy = 0;
 	int data_status = 0;
@@ -122,6 +122,7 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 	int mm_step_count = 0;
 	int request_length = 0;
 	int crossing_index = 0;
+	int ided = 0;
 	unsigned int length;
 	char pbuf[128];
 
@@ -169,6 +170,8 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 			default: {
 				// Look for characters; don't do anything if we're busy.
 				if (cdc.available_bytes()) {
+					if (ided)
+						c_alive <: 1;
 					pbuf[0] = cdc.get_char();
 					if (busy != 0) {
 					    length = sprintf(pbuf,"ERR: Busy.\n");
@@ -306,10 +309,9 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 							c_pos_req_cfg <: readint(cdc);
 						}
 						else if (pbuf[0] == '?') {
+							ided = 1;
 							length = sprintf(pbuf,"Interface: config\n");
 							cdc.write(pbuf,length);
-							//printd(c_ps_config_debug,"Interface query complete\n");
-							//printd(c_ps_config_debug,"Interface query complete again\n");
 						}
 						else if (pbuf[0] == 'V') {
 						    if (DIRTY)

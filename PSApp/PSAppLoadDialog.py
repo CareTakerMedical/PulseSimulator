@@ -1,9 +1,10 @@
 from PyQt5.QtCore import * 
 from PyQt5.QtGui import * 
 from PyQt5.QtWidgets import * 
-import re, struct
+import re, struct, copy
 import numpy as np
 from time import sleep
+from scipy.interpolate import interp1d
 
 class PSAppLoadWorker(QObject):
     finished = pyqtSignal()
@@ -20,6 +21,7 @@ class PSAppLoadWorker(QObject):
         self.comm_interface = parent.get_comm_interface()
         self.is_running = False
         self.cancel_operation = False
+        self.table_init = None
 
     def stop(self):
         self.cancel_operation = True
@@ -32,22 +34,21 @@ class PSAppLoadWorker(QObject):
                 fh = open(self.parent.get_pulse_table_file(),'rb')
                 pts = fh.read()
                 fh.close()
-                table_init = struct.unpack("256h",pts)
+                self.table_init = struct.unpack("256h",pts)
             except:
                 self.table_read_error.emit()
                 self.is_running = False
                 continue
             # Make sure the resulting table is 256 points; any other value is incompatible with the
             # firmware, given its current design.
-            if (len(table_init) != 256):
+            if (len(self.table_init) != 256):
                 self.table_read_error.emit()
                 self.is_running = False
                 continue
-            table_span = max(table_init) - min(table_init)
             pressure_table = self.ps_state.get_state("pressure_table")
             motor_locs = np.array(pressure_table["x"])
             mmhg_readings = np.array(pressure_table["y"])
-    
+
             # Second thing to do is to figure out how many loads we're going to do.  If
             # we're currently not playing, then we only do one load.  If we're playing,
             # figure out the maximum number of steps that we need to take, and figure out when/where
@@ -59,6 +60,16 @@ class PSAppLoadWorker(QObject):
             for p in params:
                 writes[p] = self.ps_state.get_state(p)
             deltas = dict()
+
+            # New, October 12:  Adjust the width of the pulse based on changes in the pressure
+            # parameters.  As pressure parameters increase, we should expect the waveform to
+            # expand, which is not something that is currently accounted for.  Algorithm is fairly
+            # simple:  fit the measured pulse to the initial parameters, then truncate and
+            # interpolate until we're back to 256 points.  Same goes when going to lower initial
+            # pressure parameters; we'll add points to the end.
+            if not(self.ps_state.get_state("pressure_defaults")):
+                self.ps_state.set_state("pressure_defaults",{"systolic":self.ps_state.get_state("systolic"),"diastolic":self.ps_state.get_state("diastolic")})
+
             if (self.ps_state.get_state("playing")):
                 for p in params:
                     writes[p] = int(self.prev_ps_state.get_state(p))
@@ -71,13 +82,17 @@ class PSAppLoadWorker(QObject):
                         loop = int(abs(deltas[key]))
             else:
                 self.ps_state.set_state("playing",True)
+                self.ps_state.set_state("pressure_defaults",{"systolic":self.ps_state.get_state("systolic"),"diastolic":self.ps_state.get_state("diastolic")})
             for j in range(loop):
                 if not self.cancel_operation:
                     self.point_load_init.emit()
                     mmhg_vals = []
                     delta = writes["systolic"] - writes["diastolic"]
-                    for val in table_init:
-                        mmhg_vals.append((int(val) - min(table_init)) / table_span * delta + writes["diastolic"])
+                    table = self._modify_table(writes["systolic"],writes["diastolic"])
+                    #table = self.table_init
+                    table_span = max(table) - min(table)
+                    for val in table:
+                        mmhg_vals.append((int(val) - min(table)) / table_span * delta + writes["diastolic"])
                     # Take the pressure values and convert them to positions
                     positions = []
                     for i in range(len(mmhg_vals)):
@@ -92,11 +107,11 @@ class PSAppLoadWorker(QObject):
                         # firmware is the index value for every 20ms interval.  So, the rates that are entered
                         # in as 'param/minute' need to be converted to the 20ms interval.  Therefore, we multiply
                         # the entered value by:
-                        #   * The length of the table
+                        #   * The length of the table, 256
                         #   * 256, because we're sending the value over in 'X.8' format
                         #   * 1/60, because we want to convert 'per minute' to 'per second'
                         #   * 1/50, because we want to convert 'per second' to 'per 20ms'
-                        multiplier = len(table_init) * 256.0 / 60.0 / 50.0
+                        multiplier = 256 * 256.0 / 60.0 / 50.0
                         hr = writes["heart_rate"] * multiplier
                         self.comm_interface.transaction(b'H'+str(round(hr)).encode())
                         rr = writes["respiration_rate"] * multiplier
@@ -140,6 +155,47 @@ class PSAppLoadWorker(QObject):
             self.is_running = False
         sleep(0.1)
         self.finished.emit()
+
+    def _modify_table(self,systolic,diastolic):
+        # Modify this parameter to change the amount of truncation/extension
+        scale = 3
+        pdef = self.ps_state.get_state("pressure_defaults")
+        dl = scale * ((systolic - pdef["systolic"]) + (diastolic - pdef["diastolic"]))
+        table = copy.deepcopy(self.table_init)
+        if (dl == 0):
+            return table
+        elif (dl > 0):
+            # We're going to truncate the table by a scaled number of points, except we're going to
+            # keep some of the points on the end
+            table = table[:int(256 - (dl + 5))] + table[251:256]
+        else:
+            # Find the minimum point in the pulse, and stretch it by 'dl'
+            min_table = min(table)
+            for i in range(len(table)):
+                if (min_table == table[i]):
+                    break
+            tmplist = []
+            for x in range(int(abs(dl))):
+                tmplist.append(min_table)
+            table = table[:i] + tuple(tmplist) + table[i:256]
+        # Turn the table into a numpy array
+        table = np.array(table)
+        # I originally tried resample, but that turned out to not work well.  Go
+        # to an interpolation method provided by scipy
+        f = interp1d(np.arange(table.size),table)
+        table = f(np.linspace(0,table.size-1,256))
+        table = table.tolist()
+        '''
+        fh = open("table_values.txt","a")
+        print("systolic = {}, diastolic = {}".format(systolic,diastolic),file=fh)
+        for i in range(len(table)):
+            if (((i + 1) % 16) and ((i + 1) != len(table))):
+                print("{}, ".format(int(table[i])),file=fh,end="")
+            else:
+                print("{}".format(int(table[i])),file=fh)
+        fh.close()
+        '''
+        return table
 
 class PSAppLoadDialog(QDialog):
     new_parameter_value = pyqtSignal(object,object)

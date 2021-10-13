@@ -21,6 +21,8 @@ class PSAppState(object):
         self.state["respiration_rate"] = 10
         self.state["play_mode"] = PlayMode.PULSE_TABLE
         self.state["pressure_table"] = {"x":list(),"y":list()}
+        self.state["pulse_table"] = {"x":list(),"y":list()}
+        self.state["pressure_defaults"] = None
 
     def clear_pressure_table(self):
         self.state["pressure_table"] = {"x":list(),"y":list()}

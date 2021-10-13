@@ -765,6 +765,12 @@ class PSAppMainWindow(QMainWindow):
         warn_dlg.show()
         if self.ps_state.get_state("playing"):
             self._eval_play_stop()
+        # Kill the communication object
+        try:
+            self.comm_interface.stop()
+            
+        except:
+            pass
         # By this point, any playback that was happening should be over.  Kill the connection checker
         try:
             self.worker.stop()
@@ -1075,7 +1081,7 @@ class PSAppMainWindow(QMainWindow):
         self._set_widget_status()
         # If we're connected, check the firmware version
         if cs_connected:
-            self.cfg_iface["ser"].write(b'V')
-            rem = re.match(b'^Version:\s+([0-9a-fA-F\+]+)',self.cfg_iface["ser"].readline())
+            vers = self.comm_interface.transaction(b'V',True)
+            rem = re.match(b'^Version:\s+([0-9a-fA-F\+]+)',vers)
             if rem:
                 self.fw_version_label.setText("Pulse Simulator Firmware Version: {}".format(rem.group(1).decode()))

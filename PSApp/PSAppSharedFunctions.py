@@ -1,3 +1,10 @@
+from enum import Enum
+
+class PSAppExitCodes(Enum):
+    EXIT = 0
+    FW = 1
+    RETURN = 2
+
 class PSCommException(Exception):
     pass
 

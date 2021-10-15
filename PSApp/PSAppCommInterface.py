@@ -4,26 +4,29 @@ from time import sleep
 from PSAppSharedFunctions import PSCommException
 
 class PSAppCommInterfaceWorker(QObject):
-    finished = pyqtSignal()
     def __init__(self,cfg_iface,request_queue,return_queue):
         super(PSAppCommInterfaceWorker,self).__init__()
         self.cfg_iface = cfg_iface
         self.request_queue = request_queue
         self.return_queue = return_queue
+        self.ngets = 0
         self.is_running = False
 
     def run(self):
         self.is_running = True
         while self.is_running:
             try:
-                [cmd,read_response,timeout] = self.request_queue.get(timeout=8)
+                [cmd,read_response,timeout] = self.request_queue.get(timeout=0.1)
                 retq = True
             except:
+                self.ngets += 1
+                if (self.ngets < 80):
+                    continue
+                self.ngets = 0
                 [cmd,read_response,timeout] = [b'V',True,0.5]
                 retq = False
             match = False
             self.cfg_iface.timeout = timeout
-            print("cmd = {}".format(cmd.decode()))
             for i in range(10):
                 self.cfg_iface.write(cmd+b'\n')
                 ret = self.cfg_iface.readline()
@@ -52,7 +55,6 @@ class PSAppCommInterfaceWorker(QObject):
                         raise PSCommException("Read never returned a valid value.")
                 if retq:
                     self.return_queue.put(ret)
-        self.finished.emit()
 
     def shutdown(self):
         self.is_running = False
@@ -77,16 +79,13 @@ class PSAppCommInterface(QObject):
         return self.done
 
     def stop(self):
-        self.comm_worker.finished.connect(self._graceful_close)
         self.comm_worker.shutdown()
+        self.comm_thread.quit()
+        self.comm_thread.wait()
+        self.done = True
 
     def transaction(self,cmd,read_response=False,timeout=0.5):
         """ Originally, this command would just go through its paces, communicate with the firmware, and then return a value.  However, I've implemented a watchdog on the configuration interface so that if the app ever crashes or leaves the firmware in a weird state, the firmware should go ahead and reset itself.
         """
         self.request_queue.put([cmd,read_response,timeout])
         return self.return_queue.get()
-
-    def _graceful_close(self):
-        self.thread.quit()
-        self.thread.wait()
-        self.done = True

@@ -11,6 +11,7 @@ from PSAppCalibrate import PSAppCalibrationWorker
 from PSAppLoadDialog import PSAppLoadDialog
 from PSAppCommInterface import PSAppCommInterface
 from PSAppPlayback import PSAppPulsePlaybackWorker
+from PSAppSharedFunctions import PSAppExitCodes
 from serial.tools.list_ports import comports
 from time import sleep
 import re,copy
@@ -157,6 +158,7 @@ class PSAppMainWindow(QMainWindow):
         self.timestamp = None
         self.calibration_attempts = 0
         self.max_calibration_attempts = 3
+        self.parent = parent
 
         # Create central widget
         cwidget = QWidget()
@@ -408,13 +410,22 @@ class PSAppMainWindow(QMainWindow):
         # And add the tab
         self.twidget.addTab(cfg_widget,"Config")
 
-        # Create 'about' widget; just some labels with our own software version, and then some contact
-        # information.
+        # Create 'about' widget; there are labels for both application and firmware version, as well
+        # as contact information.  We'll also have a button to begin the firmware update process,
+        # which will be its own special app.  There are also magic buttons that can be conjured in
+        # order to manually move the motor.
         self.about_widget = QWidget()
         self.about_layout = QVBoxLayout()
         self.app_version_label = MagicLabel("Pulse Simulator App Version: {}".format(get_psapp_version()))
         self.app_version_label.double_clicked.connect(self._add_manual_buttons)
-        self.fw_version_label = QLabel("Pulse Simulator Firmware Version: ")
+        self.fw_version_label = QLabel("Pulse Simulator Firmware Version:             ")
+        fw_update_button = QPushButton("Upgrade Device Firmware")
+        fw_update_button.clicked.connect(lambda: self._graceful_close(ec=PSAppExitCodes.FW.value))
+        fw_widget = QWidget()
+        fw_layout = QHBoxLayout()
+        fw_layout.addWidget(self.fw_version_label)
+        fw_layout.addWidget(fw_update_button)
+        fw_widget.setLayout(fw_layout)
         # Magic buttons that don't appear until 'conjured'
         self.move_near = QPushButton("Near")
         self.move_near.setAutoRepeat(True)
@@ -427,7 +438,7 @@ class PSAppMainWindow(QMainWindow):
         self.move_far.setAutoRepeatInterval(250)
         self.move_far.clicked.connect(lambda: self._increment(10))
         self.about_layout.addWidget(self.app_version_label)
-        self.about_layout.addWidget(self.fw_version_label)
+        self.about_layout.addWidget(fw_widget)
         self.about_layout.addWidget(QLabel("For issues, contact Jake Wegman (jake@caretakermedical.net)"))
         self.about_widget.setLayout(self.about_layout)
 
@@ -757,7 +768,7 @@ class PSAppMainWindow(QMainWindow):
         self.wf_status.setText("Status: Running calibration procedure.")
         self._start_cal_procedure()
 
-    def _graceful_close(self):
+    def _graceful_close(self,ec=PSAppExitCodes.EXIT.value):
         """ Shutdown any threads that might be running, close down communication channels, then close down.  Pop up a window indicating that we've received the message.
         """
         warn_dlg = QMessageBox()
@@ -768,7 +779,8 @@ class PSAppMainWindow(QMainWindow):
         # Kill the communication object
         try:
             self.comm_interface.stop()
-            
+            while not(self.comm_interface.is_done()):
+                sleep(0.1)
         except:
             pass
         # By this point, any playback that was happening should be over.  Kill the connection checker
@@ -787,7 +799,7 @@ class PSAppMainWindow(QMainWindow):
                     pass
         # And close down the app
         warn_dlg.close()
-        self.close()
+        self.parent.exit(ec)
 
     def _hardware_disconnect_event(self):
         """ We sense that the COM device that we're supposed to use has gone away.
@@ -848,7 +860,7 @@ class PSAppMainWindow(QMainWindow):
         self.cnct_dlg.data_iface_signal.connect(self._store_data_iface)
         self.cnct_dlg.accepted.connect(self._update_connection_status)
         # Gotta wait for the operating system to clear the dialog chaff, so wait 200ms to close the window
-        self.cnct_dlg.rejected.connect(lambda: QTimer.singleShot(200,self.close))
+        self.cnct_dlg.rejected.connect(lambda: QTimer.singleShot(200,self._graceful_close))
         self.cnct_dlg.exec()
         # Once we get to this point, we'll launch the connection checker
         if not(None in [self.cfg_iface,self.data_iface]):

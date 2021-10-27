@@ -115,4 +115,19 @@
 // No motor power detector limit
 #define MAX_STEP_COUNT  50000
 
+// USB mode defines
+#define USB_NORMAL	0
+#define USB_DFU		1
+
+// Firmware update error codes
+#define FU_ERR_INCORRECT_LENGTH_FORMAT  -1
+#define FU_ERR_LENGTH_DISCREPANCY       -2
+#define FU_ERR_CKSUM_DISCREPANCY        -3
+#define FU_ERR_COULD_NOT_OPEN_FLASH     -4
+#define FU_ERR_FACTORY_IMG_ID              -5
+#define FU_ERR_BOOT_IMG_ID              -6
+#define FU_ERR_FLASH_IMG_INIT           -7
+#define FU_ERR_IMG_WRITE_PAGE           -8
+#define FU_ERR_WRITE_TERM               -9
+
 #endif

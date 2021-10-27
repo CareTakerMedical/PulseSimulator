@@ -4,7 +4,11 @@ from time import sleep
 from PSAppSharedFunctions import PSCommException
 
 class PSAppCommInterfaceWorker(QObject):
+    """ Worker class for communication with the configuration interface on the Pulse Simulator hardware.
+    """
     def __init__(self,cfg_iface,request_queue,return_queue):
+        """ Initialization function.
+        """
         super(PSAppCommInterfaceWorker,self).__init__()
         self.cfg_iface = cfg_iface
         self.request_queue = request_queue
@@ -13,7 +17,12 @@ class PSAppCommInterfaceWorker(QObject):
         self.is_running = False
 
     def run(self):
+        """ Worker 'run' function
+        """
         self.is_running = True
+        # Sit in a loop, constantly seeing if a new request has come in.  Check this every 100ms.  If
+        # no new requests have been made after 8 seconds (80 loop iterations at 100ms apiece), then
+        # send a version request ('V').
         while self.is_running:
             try:
                 [cmd,read_response,timeout] = self.request_queue.get(timeout=0.1)

@@ -72,20 +72,17 @@ void watchdog(chanend c_alive)
 {
 	timer tmr;
 	unsigned int t;
+	int go = 0;
 
-	// Wait to get a signal over 'c_alive' that we're ready to start the watchdog.
-	c_alive :> int;
-	// Get the initial time;
-	tmr :> t;
 	// Sit in a loop, waiting for the timer to go off.  If we got a signal before the timer
 	// goes off, we'll reset the timer.  If we don't, we'll run 'chip_reset'.
 	while (1) {
 		select {
-			case tmr when timerafter(t + 1000000000) :> t : {
+			case (go > 0) => tmr when timerafter(t + 1000000000) :> t : {
 				chip_reset();
 				break;
 			}
-			case c_alive :> int : {
+			case c_alive :> go : {
 				tmr :> t;
 				break;
 			}
@@ -120,6 +117,7 @@ int main() {
 
     par
     {
+
 	/* USB machine stuff */
         on USB_TILE: xud(c_ep_out, XUD_EP_COUNT_OUT, c_ep_in, XUD_EP_COUNT_IN, null, XUD_SPEED_HS, XUD_PWR_SELF);
         on USB_TILE: Endpoint0(c_ep_out[0], c_ep_in[0]);

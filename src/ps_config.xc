@@ -3,11 +3,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <print.h>
+#include <quadflash.h>
+#include <quadflashlib.h>
 #include "xud_cdc.h"
 #include "ps_indicators.h"
 #include "ps_version.h"
 
-//void printd(chanend c_channel, const char * msg);
+on tile[0]: port p_led = DEBUG_LEDS;
+
+void chip_reset();
 
 int readint(client interface usb_cdc_interface cdc)
 {
@@ -77,10 +81,13 @@ int handshake_cmd(client interface usb_cdc_interface cdc, char cmd)
 	int param = 0;
 	switch (cmd) {
 		case 'E':
+		case 'F':
 		case 'G':
+		case 'Q':
 		case 'R':
 		case 'S':
 		case 'T':
+		case 'V':
 		case 'W': {
 			// Next byte needs to be '\n', otherwise the command is misformed.
 			nbuf[0] = cdc.get_char();
@@ -110,6 +117,162 @@ int handshake_cmd(client interface usb_cdc_interface cdc, char cmd)
 	return ret;
 }
 
+fl_QSPIPorts spiPorts = {
+        PORT_SQI_CS,
+        PORT_SQI_SCLK,
+        PORT_SQI_SIO,
+        on tile[0]: XS1_CLKBLK_1
+};
+
+int perform_dfu(client interface usb_cdc_interface cdc)
+{
+    char dbuf[256];
+    char hsbuf[256];
+    int result = 0;
+    int i = 0;
+    unsigned int length = 0;
+    int fw_length = 0;
+    int rlen = 256;
+    char cksum = 0;
+    int npages = 0;
+    int nbytes = 0;
+    timer tmr;
+    unsigned int t = 0;
+    fl_BootImageInfo bii;
+
+    // Connect to the flash
+    result = fl_connect(spiPorts);
+    if (result)
+        return FU_ERR_COULD_NOT_OPEN_FLASH;
+
+    printstrln("Got here, connected to the FLASH");
+    // Get the factory boot image info
+    result = fl_getFactoryImage(bii);
+    if (result) {
+        // Disconnect, then return an error
+        fl_disconnect();
+        return FU_ERR_FACTORY_IMG_ID;
+    }
+
+    printstrln("Got here, factory image found");
+    // Get the next boot image
+    tmr :> t;
+    i = 0;
+    result = 1;
+    while (result && (i < 1000)) {
+        result = fl_getNextBootImage(bii);
+        i++;
+        tmr when timerafter(t + 1000000) :> t;
+    }
+    if (result) {
+        fl_disconnect();
+        return FU_ERR_BOOT_IMG_ID;
+    }
+
+    printstrln("Got here, next boot image found");
+    // First, get the overall length that we should expect.  Use four bytes, even though that would be absurd.
+    for (i = 0; i < 5; i++) {
+        while (cdc.available_bytes() == 0);
+        dbuf[i] = cdc.get_char();
+    }
+
+    if (dbuf[4] != '\n') {
+        return FU_ERR_INCORRECT_LENGTH_FORMAT;
+    }
+
+    // Do handshake on the length, make sure we agree.  Calculate the integer length and send it back
+    i = 3;
+    while (i >= 0)
+        fw_length = (fw_length << 8) + dbuf[i--];
+    length = sprintf(hsbuf,"L=%d\n",fw_length);
+    cdc.write(hsbuf,length);
+
+    // If we're correct, get a response of 'Y'.  Otherwise, return an error
+    while (cdc.available_bytes() == 0);
+    hsbuf[0] = cdc.get_char();
+    if (hsbuf[0] != 'Y')
+        return FU_ERR_LENGTH_DISCREPANCY;
+
+    // Prep the device for writing the image pages.  Set the maximum length to 256 * the number of pages that will
+    // be required to write the whole image.
+    npages = (fw_length / 256) + 1;
+    nbytes = npages * 256;
+    result = 1;
+    i = 0;
+    tmr :> t;
+    while (result && (i < 1000)) {
+        result = fl_startImageReplace(bii,nbytes);
+        i++;
+        tmr when timerafter(t + 1000000) :> t;
+    }
+    if (result) {
+        printstrln("Got here, bad result from 'fl_startImageReplace'");
+        fl_disconnect();
+        return FU_ERR_FLASH_IMG_INIT;
+    }
+
+    // Once we have the length, we'll start bringing in the data 256 bytes at a time; this is the page size for the flash
+    while (fw_length > 0) {
+        // If we're below 'fw_length-256', then we'll request 256 bytes; if not, then we'll read the remaining length.
+        // While doing this exercise, calculate a checksum.
+        rlen = ((fw_length - 256) >= 0) ? 256 : fw_length;
+        cksum = 0;
+        for (i = 0; i < rlen; i++) {
+            while (cdc.available_bytes() == 0);
+            dbuf[i] = cdc.get_char();
+            cksum += dbuf[i];
+            // Through away the carry...
+            cksum &= 0x0FF;
+        }
+        // If rlen did not equal 256, fill the rest of the buffer with 0's.
+        for (i = 0; i < (256 - rlen); i++)
+            dbuf[(i + rlen)] = 0;
+        fw_length -= rlen;
+        cksum = ~cksum;
+        length = sprintf(hsbuf,"CKSUM=%d\n",cksum);
+        cdc.write(hsbuf,length);
+
+        // Again, if we're correct, we'll get a response of 'Y'.  Otherwise, return an error
+        while (cdc.available_bytes() == 0);
+        hsbuf[0] = cdc.get_char();
+        if (hsbuf[0] != 'Y')
+            return FU_ERR_CKSUM_DISCREPANCY;
+
+        // We have a page's worth of data at this point
+        tmr :> t;
+        i = 0;
+        result = 1;
+        while (result && (i < 1000)) {
+            result = fl_writeImagePage(dbuf);
+            i++;
+            tmr when timerafter(t + 1000000) :> t;
+        }
+        if (result) {
+            printstrln("Got here, bad result from 'fl_writeImagePage'");
+            fl_disconnect();
+            return FU_ERR_IMG_WRITE_PAGE;
+        }
+    }
+    // Now that we've gotten to this point, everything should be written, so issue a command saying that we've successfully written everything.
+    tmr :> t;
+    i = 0;
+    result = 1;
+    while (result && (i < 1000)) {
+        result = fl_endWriteImage();
+        i++;
+        tmr when timerafter(t + 1000000) :> t;
+    }
+    if (result) {
+        printstrln("Got here, bad result from 'fl_endWriteImage'");
+        fl_disconnect();
+        return FU_ERR_WRITE_TERM;
+    }
+
+    // I think this means we're done?
+    fl_disconnect();
+    return 0;
+}
+
 void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c_pos_req_cfg, chanend c_wf_mode, chanend c_wf_data, chanend c_wf_params, chanend c_data_mode, chanend c_data_status, chanend c_mm_fault, chanend c_wf_switch, chanend c_alive)
 {
 	int busy = 0;
@@ -122,7 +285,9 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 	int mm_step_count = 0;
 	int request_length = 0;
 	int crossing_index = 0;
+	int wf_playing = 0;
 	int ided = 0;
+	int fw_ret = 0;
 	unsigned int length;
 	char pbuf[128];
 
@@ -152,6 +317,7 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 			        if (pb_stop) {
 			            pb_stop = 0;
 			            length = 0;
+				    wf_playing = 0;
 			        }
 			        else
 			            length = sprintf(pbuf,"OK: Data ready\n");
@@ -290,6 +456,7 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 								c_data_mode <: MODE_WAVEFORM;
 								c_mode <: MODE_WAVEFORM;
 								c_wf_mode <: WF_PLAY_PT;
+								wf_playing = 1;
 							}
 							//else
 								//printd(c_ps_config_debug,"Handshake failed, initial command = 'T'\n");
@@ -314,16 +481,45 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 							cdc.write(pbuf,length);
 						}
 						else if (pbuf[0] == 'V') {
-						    if (DIRTY)
-						        length = sprintf(pbuf,"Version: %c%c%c%c%c%c%c%c%c\n",fw_version[0],fw_version[1],fw_version[2],fw_version[3],fw_version[4],fw_version[5],fw_version[6],fw_version[7],'+');
-						    else
-						        length = sprintf(pbuf,"Version: %c%c%c%c%c%c%c%c\n",fw_version[0],fw_version[1],fw_version[2],fw_version[3],fw_version[4],fw_version[5],fw_version[6],fw_version[7]);
-						    cdc.write(pbuf,length);
+						    if (handshake_cmd(cdc,'V') > 0) {
+						        if (DIRTY)
+						            length = sprintf(pbuf,"Version: %c%c%c%c%c%c%c%c%c\n",fw_version[0],fw_version[1],fw_version[2],fw_version[3],fw_version[4],fw_version[5],fw_version[6],fw_version[7],'+');
+						        else
+						            length = sprintf(pbuf,"Version: %c%c%c%c%c%c%c%c\n",fw_version[0],fw_version[1],fw_version[2],fw_version[3],fw_version[4],fw_version[5],fw_version[6],fw_version[7]);
+						        cdc.write(pbuf,length);
+						    }
+						}
+						else if (pbuf[0] == 'F') {
+						    if (handshake_cmd(cdc,'F') > 0) {
+						        c_alive <: 0; // Turn off watchdog
+						    	if (wf_playing) {
+						    	    pb_stop = 1;
+						    	    c_wf_mode <: WF_IDLE;
+						    	    while (wf_playing);
+						    	}
+						    	else {
+						    	    c_data_mode <: MODE_IDLE;
+						    	    c_mode <: MODE_IDLE;
+						    	    c_wf_mode <: WF_IDLE;
+						    	}
+						    	// Set the LED to be on, and then issue the command to reset the USB interface; the rest of the app should be sitting idle by now.
+						    	p_led <: USB_DFU;
+						    	fw_ret = perform_dfu(cdc);
+						    	if (fw_ret)
+						    	    length = sprintf(pbuf,"ERR: %d\n",fw_ret);
+						    	else
+						    	    length = sprintf(pbuf,"OK: Type 'Q' to reboot\n");
+						    	p_led <: USB_NORMAL;
+						    	cdc.write(pbuf,length);
+						    }
+						}
+						else if (pbuf[0] == 'Q') {
+						    if (handshake_cmd(cdc,'Q') > 0)
+						        chip_reset();
 						}
 						else {
 							cdc.flush_buffer();
-						}
-						// Other stuff will come later...
+						} // else
 					} // ends cdc.available_bytes
 				} // ends busy
 				break;

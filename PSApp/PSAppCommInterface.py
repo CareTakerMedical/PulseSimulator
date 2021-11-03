@@ -21,7 +21,7 @@ class PSAppCommInterfaceWorker(QObject):
         """
         self.is_running = True
         # Sit in a loop, constantly seeing if a new request has come in.  Check this every 100ms.  If
-        # no new requests have been made after 8 seconds (80 loop iterations at 100ms apiece), then
+        # no new requests have been made after 18 seconds (180 loop iterations at 100ms apiece), then
         # send a version request ('V').
         while self.is_running:
             try:
@@ -29,7 +29,7 @@ class PSAppCommInterfaceWorker(QObject):
                 retq = True
             except:
                 self.ngets += 1
-                if (self.ngets < 280):
+                if (self.ngets < 180):
                     continue
                 self.ngets = 0
                 [cmd,read_response,timeout] = [b'V',True,0.5]

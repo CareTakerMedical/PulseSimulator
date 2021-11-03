@@ -385,7 +385,10 @@ class PSAppFirmwareLoader(QMainWindow):
     def _graceful_close(self,ec=PSAppExitCodes.EXIT.value):
         """ Try to close gracefully.
         """
-        self.parent.exit(ec)
+        try:
+            self.parent.exit(ec)
+        except:
+            pass
 
     def _prompt_exit(self):
         """ When exiting, we can either return to the Pulse Simulator GUI, or exit entirely; give the user a choice here.

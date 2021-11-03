@@ -786,12 +786,13 @@ class PSAppMainWindow(QMainWindow):
             pass
 
         # Kill the communication object
-        try:
-            self.comm_interface.stop()
-            while not(self.comm_interface.is_done()):
-                sleep(0.1)
-        except:
-            pass
+        if (self.ps_state.get_state("connected")):
+            try:
+                self.comm_interface.stop()
+                while not(self.comm_interface.is_done()):
+                    sleep(0.1)
+            except:
+                pass
 
         # Formally close the serial connections
         for x in [self.cfg_iface,self.data_iface]:

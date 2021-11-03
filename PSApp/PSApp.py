@@ -776,13 +776,7 @@ class PSAppMainWindow(QMainWindow):
         warn_dlg.show()
         if self.ps_state.get_state("playing"):
             self._eval_play_stop()
-        # Kill the communication object
-        try:
-            self.comm_interface.stop()
-            while not(self.comm_interface.is_done()):
-                sleep(0.1)
-        except:
-            pass
+
         # By this point, any playback that was happening should be over.  Kill the connection checker
         try:
             self.worker.stop()
@@ -790,6 +784,15 @@ class PSAppMainWindow(QMainWindow):
             self.thread.wait()
         except:
             pass
+
+        # Kill the communication object
+        try:
+            self.comm_interface.stop()
+            while not(self.comm_interface.is_done()):
+                sleep(0.1)
+        except:
+            pass
+
         # Formally close the serial connections
         for x in [self.cfg_iface,self.data_iface]:
             if x:

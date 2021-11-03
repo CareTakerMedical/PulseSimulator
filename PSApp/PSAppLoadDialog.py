@@ -5,6 +5,9 @@ import re, struct, copy
 import numpy as np
 from time import sleep
 from scipy.interpolate import interp1d
+import sys,os
+sys.path.append("./math")
+from PSAppShaper import shape_pulse
 
 class PSAppLoadWorker(QObject):
     finished = pyqtSignal()
@@ -22,6 +25,8 @@ class PSAppLoadWorker(QObject):
         self.is_running = False
         self.cancel_operation = False
         self.table_init = None
+        self.shaped_table = None
+        self.shape = False
 
     def stop(self):
         self.cancel_operation = True
@@ -45,6 +50,9 @@ class PSAppLoadWorker(QObject):
                 self.table_read_error.emit()
                 self.is_running = False
                 continue
+            # Take the pulse and shape it; details in the library file
+            if self.shape:
+                self.shaped_table = shape_pulse(self.table_init)
             pressure_table = self.ps_state.get_state("pressure_table")
             motor_locs = np.array(pressure_table["x"])
             mmhg_readings = np.array(pressure_table["y"])
@@ -88,8 +96,10 @@ class PSAppLoadWorker(QObject):
                     self.point_load_init.emit()
                     mmhg_vals = []
                     delta = writes["systolic"] - writes["diastolic"]
-                    table = self._modify_table(writes["systolic"],writes["diastolic"])
-                    #table = self.table_init
+                    #table = self._modify_table(writes["systolic"],writes["diastolic"])
+                    table = self.table_init
+                    if self.shape:
+                        table = self.shaped_table
                     table_span = max(table) - min(table)
                     for val in table:
                         mmhg_vals.append((int(val) - min(table)) / table_span * delta + writes["diastolic"])

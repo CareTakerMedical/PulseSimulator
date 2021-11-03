@@ -78,7 +78,7 @@ void watchdog(chanend c_alive)
 	// goes off, we'll reset the timer.  If we don't, we'll run 'chip_reset'.
 	while (1) {
 		select {
-			case (go > 0) => tmr when timerafter(t + 1000000000) :> t : {
+			case (go > 0) => tmr when timerafter(t + 3000000000) :> t : {
 				chip_reset();
 				break;
 			}

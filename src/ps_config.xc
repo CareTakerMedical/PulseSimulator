@@ -145,7 +145,6 @@ int perform_dfu(client interface usb_cdc_interface cdc)
     if (result)
         return FU_ERR_COULD_NOT_OPEN_FLASH;
 
-    printstrln("Got here, connected to the FLASH");
     // Get the factory boot image info
     result = fl_getFactoryImage(bii);
     if (result) {
@@ -154,7 +153,6 @@ int perform_dfu(client interface usb_cdc_interface cdc)
         return FU_ERR_FACTORY_IMG_ID;
     }
 
-    printstrln("Got here, factory image found");
     // Get the next boot image
     tmr :> t;
     i = 0;
@@ -169,7 +167,6 @@ int perform_dfu(client interface usb_cdc_interface cdc)
         return FU_ERR_BOOT_IMG_ID;
     }
 
-    printstrln("Got here, next boot image found");
     // First, get the overall length that we should expect.  Use four bytes, even though that would be absurd.
     for (i = 0; i < 5; i++) {
         while (cdc.available_bytes() == 0);
@@ -206,7 +203,6 @@ int perform_dfu(client interface usb_cdc_interface cdc)
         tmr when timerafter(t + 1000000) :> t;
     }
     if (result) {
-        printstrln("Got here, bad result from 'fl_startImageReplace'");
         fl_disconnect();
         return FU_ERR_FLASH_IMG_INIT;
     }

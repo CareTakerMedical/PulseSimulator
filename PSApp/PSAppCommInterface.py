@@ -29,7 +29,7 @@ class PSAppCommInterfaceWorker(QObject):
                 retq = True
             except:
                 self.ngets += 1
-                if (self.ngets < 80):
+                if (self.ngets < 280):
                     continue
                 self.ngets = 0
                 [cmd,read_response,timeout] = [b'V',True,0.5]
@@ -88,6 +88,7 @@ class PSAppCommInterface(QObject):
         return self.done
 
     def stop(self):
+        self.transaction(b'Q')
         self.comm_worker.shutdown()
         self.comm_thread.quit()
         self.comm_thread.wait()

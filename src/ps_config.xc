@@ -470,6 +470,7 @@ void ps_config(client interface usb_cdc_interface cdc, chanend c_mode, chanend c
 							c_mode <: MODE_OVERRIDE;
 							c_pos_req_cfg <: MIN_STRIDE_TIME;
 							c_pos_req_cfg <: readint(cdc);
+							c_pos_req_cfg <: 0; // Settling time
 						}
 						else if (pbuf[0] == '?') {
 							ided = 1;

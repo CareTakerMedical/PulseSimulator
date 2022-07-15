@@ -3,5 +3,5 @@
 
 #define DIRTY	1
 
-char fw_version[8] = {'9', '4', 'a', '7', '2', '7', '1', '5'};
+char fw_version[8] = {'e', 'd', 'e', 'a', '0', 'c', '6', 'a'};
 #endif /* PS_VERSION_H_ */
